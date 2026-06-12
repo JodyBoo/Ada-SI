@@ -21,10 +21,10 @@ export function PipApprovalCard({ feedId, card, pip }: PipApprovalCardProps) {
     <div className={`pip-install-card${pip.busy ? ' pip-install-busy' : ''}`} data-pip-id={pip.pipId}>
       <div className="pip-install-header">
         <span className="pip-install-badge">Pip install approval</span>
-        <h4 className="pip-install-title">{card.toolName || 'Tool'}</h4>
+        <h4 className="pip-install-title">{card.toolName || 'Skill'}</h4>
       </div>
       <div className="pip-install-body">
-        <p>The tool build needs new Python packages in the shared tool runtime venv:</p>
+        <p>The skill build needs new Python packages in the shared runtime venv:</p>
         <ul className="pip-install-packages">{pkgItems}</ul>
         {pip.alreadyInstalled && pip.alreadyInstalled.length > 0 && (
           <p className="pip-install-note">

@@ -21,8 +21,16 @@ import type {
 } from '../types/events'
 import { createDefaultViewerPhases, createToolPlanCard } from '../types/events'
 import { createFeedId } from '../utils/id'
+import { didLevelUp, getProgression, type ProgressionSnapshot } from './progression'
 
 type SidePanelTab = 'tools' | 'packages'
+
+export type CelebrationEvent = {
+  id: string
+  toolName: string
+  progression: ProgressionSnapshot
+  leveledUp: boolean
+}
 
 type AppState = {
   appConfig: AppConfig
@@ -42,6 +50,8 @@ type AppState = {
   tools: ToolSummary[]
   packages: PipPackage[]
   showScrollBottom: boolean
+  celebration: CelebrationEvent | null
+  recentlyUnlockedTool: string | null
   abortController: AbortController | null
   runAbortControllers: Map<string, AbortController>
 
@@ -57,6 +67,8 @@ type AppState = {
   setTools: (tools: ToolSummary[]) => void
   setPackages: (packages: PipPackage[]) => void
   setShowScrollBottom: (show: boolean) => void
+  clearCelebration: () => void
+  clearRecentlyUnlockedTool: () => void
   setAbortController: (controller: AbortController | null) => void
   bindRunAbortController: (runId: string) => AbortController
   clearRunAbortController: (runId: string) => void
@@ -136,6 +148,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   tools: [],
   packages: [],
   showScrollBottom: false,
+  celebration: null,
+  recentlyUnlockedTool: null,
   abortController: null,
   runAbortControllers: new Map(),
 
@@ -160,6 +174,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTools: (tools) => set({ tools }),
   setPackages: (packages) => set({ packages }),
   setShowScrollBottom: (show) => set({ showScrollBottom: show }),
+  clearCelebration: () => set({ celebration: null }),
+  clearRecentlyUnlockedTool: () => set({ recentlyUnlockedTool: null }),
   setAbortController: (controller) => set({ abortController: controller }),
 
   bindRunAbortController: (runId) => {
@@ -378,7 +394,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id,
       runId,
       planId,
-      toolName: toolName || 'Tool',
+      toolName: toolName || 'Skill',
       kind,
       mode: 'draft',
     })
@@ -498,12 +514,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   showViewerSuccess: (id, message) => {
+    const item = get().feed.find((f) => f.id === id && f.type === 'tool-plan') as
+      | ToolPlanFeedItem
+      | undefined
+    const toolName = item?.card.toolName || 'Skill'
+    const toolCountAfter = get().tools.length
+    const toolCountBefore = Math.max(0, toolCountAfter - 1)
+    const leveledUp = didLevelUp(toolCountBefore, toolCountAfter)
+
     const phases = Object.fromEntries(
       VIEWER_PHASES.map((p) => [p.id, 'done' as PhaseStatus]),
     )
     get().updateToolPlanCard(id, {
       viewerPhases: phases,
-      viewerOutput: [...(get().feed.find((f) => f.id === id && f.type === 'tool-plan') as ToolPlanFeedItem)?.card.viewerOutput || [], message],
+      viewerOutput: [...item?.card.viewerOutput || [], message],
       codePanelTitle: 'Complete',
       codeTab: 'output',
       showCodeTabs: true,
@@ -512,7 +536,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       mode: 'success',
       busy: false,
     })
-    get().collapseToolPlan(id, message, 'Installed', 'success')
+
+    set({
+      celebration: {
+        id: createFeedId(),
+        toolName,
+        progression: getProgression(toolCountAfter),
+        leveledUp,
+      },
+      recentlyUnlockedTool: toolName,
+      activeSidePanelTab: 'tools',
+    })
+
+    window.setTimeout(() => {
+      const current = get().feed.find((f) => f.id === id && f.type === 'tool-plan') as
+        | ToolPlanFeedItem
+        | undefined
+      if (!current || current.card.mode !== 'success') return
+      get().collapseToolPlan(id, message, 'Unlocked', 'success')
+    }, 2800)
   },
 }))
 

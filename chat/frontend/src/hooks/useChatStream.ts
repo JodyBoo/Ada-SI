@@ -200,7 +200,7 @@ export function useChatStream() {
         if (planReceived) {
           store.pushConversation({
             role: 'assistant',
-            content: '[System] A new tool plan is pending your approval.',
+            content: '[System] A new skill plan is pending your approval.',
           })
           store.setStatus('')
         } else {

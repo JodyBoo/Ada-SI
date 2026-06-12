@@ -103,7 +103,7 @@ export async function consumeBuildStream(
         if (json.ada_event === 'pip_install_pending') {
           buildResult = { status: 'pip_pending' }
         } else if (json.ada_event === 'tool_installed') {
-          buildResult = { status: 'success', message: json.message || 'Tool installed.' }
+          buildResult = { status: 'success', message: json.message || 'Skill installed.' }
         } else if (json.ada_event === 'tool_build_failed') {
           buildResult = {
             status: 'failed',

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 
 export function Welcome() {
-  const chips = ['Ask a question', 'Request a new tool', 'Run an installed tool']
+  const chips = ['Ask a question', 'Request a new skill', 'Run an installed skill']
 
   return (
     <div className="welcome">
@@ -9,7 +9,7 @@ export function Welcome() {
         A
       </div>
       <h2>What would you like to build?</h2>
-      <p>Chat with the lite model or request new tools for the agent to create.</p>
+      <p>Chat with the lite model or request new skills for the agent to create.</p>
       <div className="welcome-chips">
         {chips.map((chip, index) => (
           <motion.span

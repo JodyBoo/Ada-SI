@@ -5,12 +5,12 @@ export const SCROLL_THRESHOLD = 80
 export const MAX_TEXTAREA_ROWS = 6
 
 export const BUILD_STEPS = [
-  { step_id: 'generate_code', label: 'Generate tool code' },
+  { step_id: 'generate_code', label: 'Generate skill code' },
   { step_id: 'validate_code', label: 'Validate module structure' },
   { step_id: 'sandbox_test', label: 'Run sandbox tests' },
   { step_id: 'pip_review', label: 'Review pip packages' },
-  { step_id: 'runtime_verify', label: 'Verify in tool runtime' },
-  { step_id: 'install_tool', label: 'Install tool' },
+  { step_id: 'runtime_verify', label: 'Verify in skill runtime' },
+  { step_id: 'install_tool', label: 'Install skill' },
 ] as const
 
 export const VIEWER_PHASES = [

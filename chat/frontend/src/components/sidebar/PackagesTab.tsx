@@ -13,7 +13,7 @@ function PackagesEmptyState() {
       </div>
       <p className="empty-state-title">No approved packages yet</p>
       <p className="empty-state-text">
-        Packages appear here after you approve pip installs during tool builds.
+        Packages appear here after you approve pip installs during skill builds.
       </p>
     </div>
   )

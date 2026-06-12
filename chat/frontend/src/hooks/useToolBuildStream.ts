@@ -158,13 +158,13 @@ export function useToolBuildStream() {
         })
 
         if (buildResult?.status === 'success') {
+          await refreshTools()
+          await refreshPackages()
           store.showViewerSuccess(cardId, buildResult.message)
           store.pushConversation({
             role: 'assistant',
             content: `[System] ${buildResult.message}`,
           })
-          await refreshTools()
-          await refreshPackages()
           store.setStatus('')
         } else if (buildResult?.status === 'pip_pending') {
           store.updateToolPlanCard(cardId, { busy: false })
@@ -177,7 +177,7 @@ export function useToolBuildStream() {
           const isCodegen =
             /json|tool_code|parse|missing tool_code/i.test(reason) && !buildResult.logs
           store.setStatus(
-            isCodegen ? 'Code generation failed.' : 'Tool verification failed.',
+            isCodegen ? 'Code generation failed.' : 'Skill verification failed.',
             true,
           )
         }
@@ -245,20 +245,20 @@ export function useToolBuildStream() {
         store.setPipInstall(cardId, undefined)
 
         if (buildResult?.status === 'success') {
+          await refreshTools()
+          await refreshPackages()
           store.showViewerSuccess(cardId, buildResult.message)
           store.pushConversation({
             role: 'assistant',
             content: `[System] ${buildResult.message}`,
           })
-          await refreshTools()
-          await refreshPackages()
           store.setStatus('')
         } else if (buildResult?.status === 'failed') {
           const reason = buildResult.reason || 'Build failed after pip install.'
           store.appendViewerLog(cardId, reason, 'error')
           if (buildResult.logs) store.appendViewerLog(cardId, buildResult.logs, 'error')
           store.updateToolPlanCard(cardId, { busy: false, showRetry: true })
-          store.setStatus('Tool verification failed.', true)
+          store.setStatus('Skill verification failed.', true)
         } else if (buildResult?.status === 'pip_pending') {
           store.updateToolPlanCard(cardId, { busy: false })
           store.setStatus('Additional pip packages require approval.')
@@ -364,7 +364,7 @@ export function useToolBuildStream() {
                 store.completePlanDraft(cardId)
                 store.pushConversation({
                   role: 'assistant',
-                  content: `[System] Tool plan revised based on your feedback: "${feedback}"`,
+                  content: `[System] Skill plan revised based on your feedback: "${feedback}"`,
                 })
                 store.setStatus('')
                 return

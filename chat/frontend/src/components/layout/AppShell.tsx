@@ -5,6 +5,7 @@ import { ModelToolbar } from '../toolbar/ModelToolbar'
 import { Messages } from '../chat/Messages'
 import { Composer } from '../composer/Composer'
 import { EffectsLayer } from '../effects/EffectsLayer'
+import { AiVisualizerPanel } from '../visualizer/AiVisualizerPanel'
 
 export function AppShell() {
   const feed = useAppStore((s) => s.feed)
@@ -17,6 +18,7 @@ export function AppShell() {
       <ProcessPanel />
       <div className="main-column">
         <ModelToolbar />
+        <AiVisualizerPanel />
         <div className="chat-surface glass-panel">
           <div className="messages-wrap">
             <Messages feed={feed} />

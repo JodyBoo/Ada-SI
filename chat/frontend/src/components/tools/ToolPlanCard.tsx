@@ -14,12 +14,12 @@ type ToolPlanCardProps = {
 
 function getBadgeText(card: ToolPlanCardState): string {
   if (card.mode === 'draft') {
-    return card.kind === 'edit' ? 'Drafting tool edit plan' : 'Drafting tool plan'
+    return card.kind === 'edit' ? 'Drafting skill edit plan' : 'Drafting skill plan'
   }
   if (card.mode === 'building' || card.mode === 'success') {
-    return 'Tool Creation Viewer'
+    return 'Skill Creation Viewer'
   }
-  return card.kind === 'edit' ? 'Tool edit proposal' : 'Tool proposal'
+  return card.kind === 'edit' ? 'Skill edit proposal' : 'Skill proposal'
 }
 
 export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
@@ -111,6 +111,19 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
             ))}
           </div>
         )}
+        {card.mode === 'success' && (
+          <div className="skill-unlock-banner" aria-live="polite">
+            <span className="skill-unlock-banner-icon" aria-hidden="true">
+              ✦
+            </span>
+            <div className="skill-unlock-banner-text">
+              <span className="skill-unlock-banner-title">Skill unlocked!</span>
+              <span className="skill-unlock-banner-sub">
+                {card.toolName} is ready to use
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {card.pipInstall && (
@@ -167,7 +180,7 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
                   void runToolBuild(feedId, card.planId!, card.runId)
                 }
               >
-                Approve & Build Tool
+                Approve & Build Skill
               </button>
               <button
                 type="button"

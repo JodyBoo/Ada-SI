@@ -104,7 +104,7 @@ export function ModelToolbar() {
 
         <div className="toolbar-models">
           {renderSelect('chat-model-select', 'Lite model', chatModel, setChatModel)}
-          {renderSelect('second-model-select', 'Tool creator', toolCreatorModel, setToolCreatorModel)}
+          {renderSelect('second-model-select', 'Skill creator', toolCreatorModel, setToolCreatorModel)}
         </div>
 
         <div className="toolbar-actions">

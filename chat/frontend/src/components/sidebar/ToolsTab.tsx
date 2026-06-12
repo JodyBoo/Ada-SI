@@ -12,8 +12,8 @@ function ToolsEmptyState() {
           <path d="M16 2l4 4" />
         </svg>
       </div>
-      <p className="empty-state-title">No tools yet</p>
-      <p className="empty-state-text">Approved tools appear here automatically.</p>
+      <p className="empty-state-title">No skills yet</p>
+      <p className="empty-state-text">Approved skills appear here automatically.</p>
     </div>
   )
 }
@@ -33,15 +33,16 @@ type ToolsTabProps = {
 
 export function ToolsTab({ tools }: ToolsTabProps) {
   const setStatus = useAppStore((s) => s.setStatus)
+  const recentlyUnlockedTool = useAppStore((s) => s.recentlyUnlockedTool)
   const { refreshTools, refreshPackages } = useToolBuildStream()
 
   const handleDelete = async (toolName: string) => {
-    if (!confirm(`Delete tool "${toolName}"? This cannot be undone.`)) return
+    if (!confirm(`Delete skill "${toolName}"? This cannot be undone.`)) return
     try {
       await deleteTool(toolName)
       await refreshTools()
       await refreshPackages()
-      setStatus(`Tool "${toolName}" deleted.`)
+      setStatus(`Skill "${toolName}" deleted.`)
     } catch (error) {
       setStatus(`Delete failed: ${(error as Error).message}`, true)
     }
@@ -54,11 +55,15 @@ export function ToolsTab({ tools }: ToolsTabProps) {
   return (
     <>
       {tools.map((tool) => (
-        <div key={tool.name} className="tool-card" data-tool-name={tool.name}>
+        <div
+          key={tool.name}
+          className={`tool-card${recentlyUnlockedTool === tool.name ? ' tool-card-unlocked' : ''}`}
+          data-tool-name={tool.name}
+        >
           <button
             type="button"
             className="tool-delete-btn"
-            title="Delete tool"
+            title="Delete skill"
             onClick={() => void handleDelete(tool.name)}
           >
             {iconTrash()}
@@ -70,6 +75,9 @@ export function ToolsTab({ tools }: ToolsTabProps) {
               </svg>
             </span>
             <h3 className="tool-card-name">{tool.name}</h3>
+            {recentlyUnlockedTool === tool.name && (
+              <span className="tool-card-new-badge">New</span>
+            )}
           </div>
           <p className="tool-card-desc">{tool.description || 'No description.'}</p>
         </div>
