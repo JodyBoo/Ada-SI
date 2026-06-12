@@ -204,6 +204,100 @@ async def _litellm_stream(
         yield kind, text
 
 
+async def draft_tool_plan_stream(
+    tool_name: str,
+    description: str,
+    creator_model: str,
+    *,
+    litellm_url: str,
+    headers: dict[str, str],
+    run_id: str = "",
+) -> AsyncIterator[tuple[str, str]]:
+    user_content = (
+        f"Design a new tool named `{tool_name}`.\n\n"
+        f"Requirements:\n{description}"
+    )
+    messages = [
+        {"role": "system", "content": PLAN_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+    log_block(
+        run_id,
+        "PLAN",
+        f"draft request tool={tool_name} model={creator_model}",
+        description,
+    )
+    async for kind, text in _litellm_stream(
+        litellm_url, headers, creator_model, messages, temperature=0.2
+    ):
+        log_stream_delta(run_id, "plan", kind, text)
+        yield kind, text
+
+
+async def draft_tool_edit_plan_stream(
+    tool_name: str,
+    change_description: str,
+    existing_tool_code: str,
+    existing_requirements: list[str],
+    creator_model: str,
+    *,
+    litellm_url: str,
+    headers: dict[str, str],
+    run_id: str = "",
+) -> AsyncIterator[tuple[str, str]]:
+    user_content = (
+        f"Edit existing tool `{tool_name}`.\n\n"
+        f"Requested changes:\n{change_description}\n\n"
+        f"Current tool_code:\n```python\n{existing_tool_code}\n```\n\n"
+        f"Current requirements: {existing_requirements}"
+    )
+    messages = [
+        {"role": "system", "content": EDIT_PLAN_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+    log_block(
+        run_id,
+        "PLAN",
+        f"edit plan request tool={tool_name} model={creator_model}",
+        change_description,
+    )
+    async for kind, text in _litellm_stream(
+        litellm_url, headers, creator_model, messages, temperature=0.2
+    ):
+        log_stream_delta(run_id, "plan", kind, text)
+        yield kind, text
+
+
+async def revise_tool_plan_stream(
+    tool_name: str,
+    description: str,
+    previous_plan: str,
+    feedback: str,
+    creator_model: str,
+    *,
+    litellm_url: str,
+    headers: dict[str, str],
+    run_id: str = "",
+) -> AsyncIterator[tuple[str, str]]:
+    user_content = (
+        f"Tool name: `{tool_name}`\n\n"
+        f"Original requirements:\n{description}\n\n"
+        f"Previous plan (rejected by user):\n{previous_plan}\n\n"
+        f"User-requested changes:\n{feedback}\n\n"
+        f"Produce a revised plan that addresses the user's feedback."
+    )
+    messages = [
+        {"role": "system", "content": REVISE_PLAN_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+    log_block(run_id, "PLAN", f"revise request tool={tool_name}", feedback)
+    async for kind, text in _litellm_stream(
+        litellm_url, headers, creator_model, messages, temperature=0.2
+    ):
+        log_stream_delta(run_id, "plan", kind, text)
+        yield kind, text
+
+
 def _strip_markdown_fences(text: str) -> str:
     text = text.strip()
     if text.startswith("```"):
@@ -572,23 +666,18 @@ async def draft_tool_plan(
     headers: dict[str, str],
     run_id: str = "",
 ) -> str:
-    user_content = (
-        f"Design a new tool named `{tool_name}`.\n\n"
-        f"Requirements:\n{description}"
-    )
-    messages = [
-        {"role": "system", "content": PLAN_SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
-    log_block(
-        run_id,
-        "PLAN",
-        f"draft request tool={tool_name} model={creator_model}",
+    parts: list[str] = []
+    async for kind, text in draft_tool_plan_stream(
+        tool_name,
         description,
-    )
-    plan = await _litellm_chat(
-        litellm_url, headers, creator_model, messages, temperature=0.2
-    )
+        creator_model,
+        litellm_url=litellm_url,
+        headers=headers,
+        run_id=run_id,
+    ):
+        if kind == "content":
+            parts.append(text)
+    plan = "".join(parts)
     log_plan(run_id, tool_name=tool_name, plan=plan, action="drafted")
     return plan
 
@@ -604,25 +693,20 @@ async def draft_tool_edit_plan(
     headers: dict[str, str],
     run_id: str = "",
 ) -> str:
-    user_content = (
-        f"Edit existing tool `{tool_name}`.\n\n"
-        f"Requested changes:\n{change_description}\n\n"
-        f"Current tool_code:\n```python\n{existing_tool_code}\n```\n\n"
-        f"Current requirements: {existing_requirements}"
-    )
-    messages = [
-        {"role": "system", "content": EDIT_PLAN_SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
-    log_block(
-        run_id,
-        "PLAN",
-        f"edit plan request tool={tool_name} model={creator_model}",
+    parts: list[str] = []
+    async for kind, text in draft_tool_edit_plan_stream(
+        tool_name,
         change_description,
-    )
-    plan = await _litellm_chat(
-        litellm_url, headers, creator_model, messages, temperature=0.2
-    )
+        existing_tool_code,
+        existing_requirements,
+        creator_model,
+        litellm_url=litellm_url,
+        headers=headers,
+        run_id=run_id,
+    ):
+        if kind == "content":
+            parts.append(text)
+    plan = "".join(parts)
     log_plan(run_id, tool_name=tool_name, plan=plan, action="edit_drafted")
     return plan
 
@@ -638,21 +722,20 @@ async def revise_tool_plan(
     headers: dict[str, str],
     run_id: str = "",
 ) -> str:
-    user_content = (
-        f"Tool name: `{tool_name}`\n\n"
-        f"Original requirements:\n{description}\n\n"
-        f"Previous plan (rejected by user):\n{previous_plan}\n\n"
-        f"User-requested changes:\n{feedback}\n\n"
-        f"Produce a revised plan that addresses the user's feedback."
-    )
-    messages = [
-        {"role": "system", "content": REVISE_PLAN_SYSTEM_PROMPT},
-        {"role": "user", "content": user_content},
-    ]
-    log_block(run_id, "PLAN", f"revise request tool={tool_name}", feedback)
-    plan = await _litellm_chat(
-        litellm_url, headers, creator_model, messages, temperature=0.2
-    )
+    parts: list[str] = []
+    async for kind, text in revise_tool_plan_stream(
+        tool_name,
+        description,
+        previous_plan,
+        feedback,
+        creator_model,
+        litellm_url=litellm_url,
+        headers=headers,
+        run_id=run_id,
+    ):
+        if kind == "content":
+            parts.append(text)
+    plan = "".join(parts)
     log_plan(run_id, tool_name=tool_name, plan=plan, action="revised")
     return plan
 

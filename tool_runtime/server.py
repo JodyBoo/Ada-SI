@@ -7,9 +7,11 @@ from pydantic import BaseModel, Field
 from runner import (
     delete_tool,
     install_tool,
+    list_installed_packages,
     list_tools,
     load_manifest,
     pip_install,
+    pip_uninstall,
     run_tool,
     verify_tool_in_runtime,
 )
@@ -104,6 +106,21 @@ async def pip_install_endpoint(payload: PipInstallRequest) -> dict:
     if not ok:
         raise HTTPException(status_code=502, detail=logs)
     return {"status": "ok", "logs": logs}
+
+
+@app.get("/pip/packages")
+async def list_pip_packages() -> dict:
+    return {"packages": list_installed_packages()}
+
+
+@app.delete("/pip/packages/{package_name}")
+async def uninstall_pip_package(package_name: str) -> dict:
+    ok, logs = pip_uninstall(package_name)
+    if not ok:
+        if "not in the approved manifest" in logs:
+            raise HTTPException(status_code=404, detail=logs)
+        raise HTTPException(status_code=502, detail=logs)
+    return {"status": "ok", "logs": logs, "packages": list_installed_packages()}
 
 
 @app.get("/manifest")

@@ -34,12 +34,116 @@ def build_completion_payload(
     if tools is not None:
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
-    if is_gemini_model(model):
-        payload["reasoning_effort"] = reasoning_effort or "low"
+    effort = reasoning_effort
+    if effort is None and is_gemini_model(model):
+        effort = "low"
+    if effort:
+        payload["reasoning_effort"] = effort
     return payload
 
 
-def extract_stream_delta(chunk: dict) -> dict[str, str]:
+def _thinking_blocks_text(blocks: Any) -> str:
+    if not blocks:
+        return ""
+    if not isinstance(blocks, list):
+        return str(blocks)
+    parts: list[str] = []
+    for block in blocks:
+        if isinstance(block, dict):
+            parts.append(block.get("thinking") or block.get("text") or "")
+        elif block:
+            parts.append(str(block))
+    return "".join(parts)
+
+
+def _coerce_text(value: Any) -> str:
+    if not value:
+        return ""
+    if isinstance(value, list):
+        return "".join(
+            block.get("text", block) if isinstance(block, dict) else str(block)
+            for block in value
+        )
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+class ThinkStreamParser:
+    """Split reasoning embedded in streamed content tags (e.g. Deepseek/Gemini)."""
+
+    _LT = "\u003c"
+    _GT = "\u003e"
+    _OPEN = (
+        f"{_LT}think{_GT}",
+        f"{_LT}redacted_thinking{_GT}",
+        f"{_LT}thinking{_GT}",
+    )
+    _CLOSE = (
+        f"{_LT}/think{_GT}",
+        f"{_LT}/redacted_thinking{_GT}",
+        f"{_LT}/thinking{_GT}",
+    )
+
+    def __init__(self) -> None:
+        self._in_think = False
+        self._carry = ""
+
+    @staticmethod
+    def _find_marker(text: str, start: int, markers: tuple[str, ...]) -> tuple[int, int] | None:
+        best: tuple[int, int] | None = None
+        for marker in markers:
+            idx = text.find(marker, start)
+            if idx != -1 and (best is None or idx < best[0]):
+                best = (idx, len(marker))
+        return best
+
+    @staticmethod
+    def _split_partial_marker(text: str, markers: tuple[str, ...]) -> tuple[str, str]:
+        for marker in markers:
+            for size in range(len(marker) - 1, 0, -1):
+                suffix = marker[:size]
+                if text.endswith(suffix):
+                    return suffix, text[:-size]
+        return "", text
+
+    def process(self, chunk: str) -> tuple[str, str]:
+        reasoning_parts: list[str] = []
+        content_parts: list[str] = []
+        text = self._carry + chunk
+        self._carry = ""
+        i = 0
+
+        while i < len(text):
+            if self._in_think:
+                hit = self._find_marker(text, i, self._CLOSE)
+                if hit is None:
+                    segment = text[i:]
+                    self._carry, safe = self._split_partial_marker(segment, self._CLOSE)
+                    reasoning_parts.append(safe)
+                    break
+                reasoning_parts.append(text[i : hit[0]])
+                i = hit[0] + hit[1]
+                self._in_think = False
+            else:
+                hit = self._find_marker(text, i, self._OPEN)
+                if hit is None:
+                    segment = text[i:]
+                    self._carry, safe = self._split_partial_marker(segment, self._OPEN)
+                    content_parts.append(safe)
+                    break
+                content_parts.append(text[i : hit[0]])
+                i = hit[0] + hit[1]
+                self._in_think = True
+
+        return "".join(reasoning_parts), "".join(content_parts)
+
+
+def extract_stream_delta(
+    chunk: dict,
+    *,
+    think_parser: ThinkStreamParser | None = None,
+) -> dict[str, str]:
     """Normalize reasoning and content from a LiteLLM streaming chunk."""
     choices = chunk.get("choices") or []
     if not choices:
@@ -48,7 +152,7 @@ def extract_stream_delta(chunk: dict) -> dict[str, str]:
     choice = choices[0]
     delta_obj = choice.get("delta") or {}
 
-    reasoning = (
+    reasoning = _coerce_text(
         delta_obj.get("reasoning_content")
         or delta_obj.get("reasoning")
         or delta_obj.get("thinking")
@@ -57,17 +161,15 @@ def extract_stream_delta(chunk: dict) -> dict[str, str]:
         or choice.get("thinking")
         or ""
     )
-    if isinstance(reasoning, list):
-        reasoning = "".join(
-            block.get("text", block) if isinstance(block, dict) else str(block)
-            for block in reasoning
-        )
-    elif not isinstance(reasoning, str):
-        reasoning = str(reasoning) if reasoning else ""
+    if not reasoning:
+        reasoning = _thinking_blocks_text(delta_obj.get("thinking_blocks"))
+    if not reasoning:
+        reasoning = _thinking_blocks_text(choice.get("thinking_blocks"))
 
-    content = delta_obj.get("content") or choice.get("text") or ""
-    if not isinstance(content, str):
-        content = str(content) if content else ""
+    content = _coerce_text(delta_obj.get("content") or choice.get("text") or "")
+
+    if not reasoning and content and think_parser is not None:
+        reasoning, content = think_parser.process(content)
 
     return {"reasoning": reasoning, "content": content}
 
@@ -184,6 +286,7 @@ async def stream_completion_deltas(
     reasoning_effort: str | None = None,
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield (kind, text) where kind is 'reasoning' or 'content'."""
+    think_parser = ThinkStreamParser()
     async for chunk in stream_chat_completion(
         litellm_url,
         headers,
@@ -193,7 +296,7 @@ async def stream_completion_deltas(
         temperature=temperature,
         reasoning_effort=reasoning_effort,
     ):
-        delta = extract_stream_delta(chunk)
+        delta = extract_stream_delta(chunk, think_parser=think_parser)
         if delta["reasoning"]:
             yield "reasoning", delta["reasoning"]
         if delta["content"]:

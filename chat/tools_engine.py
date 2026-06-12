@@ -11,6 +11,7 @@ from runtime_client import (
     fetch_runtime_manifest,
     fetch_runtime_tools,
     normalize_requirements,
+    package_name,
     runtime_delete_tool,
     runtime_health,
     runtime_run_tool,
@@ -103,6 +104,23 @@ def read_tool_requirements(tool_name: str) -> list[str]:
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
     return normalize_requirements([line.strip() for line in lines if line.strip()])
+
+
+def get_package_usage() -> dict[str, list[str]]:
+    """Map normalized package name to tool stems that declare it in requirements."""
+    usage: dict[str, list[str]] = {}
+    for req_path in TOOLS_DIR.glob("*.requirements.txt"):
+        tool_name = req_path.name.removesuffix(".requirements.txt")
+        for req in read_tool_requirements(tool_name):
+            key = package_name(req)
+            if not key:
+                continue
+            usage.setdefault(key, [])
+            if tool_name not in usage[key]:
+                usage[key].append(tool_name)
+    for tools in usage.values():
+        tools.sort()
+    return usage
 
 
 def tool_exists(tool_name: str) -> bool:

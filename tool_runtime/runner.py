@@ -71,6 +71,44 @@ def normalize_requirements(requirements: list[str]) -> list[str]:
     return out
 
 
+def package_name(requirement: str) -> str:
+    return re.split(r"[<>=!~\[]", requirement.strip())[0].strip().lower()
+
+
+def _pip_show_version(name: str) -> str | None:
+    ensure_venv()
+    py = venv_python()
+    proc = subprocess.run(
+        [str(py), "-m", "pip", "show", name],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if proc.returncode != 0:
+        return None
+    for line in (proc.stdout or "").splitlines():
+        if line.lower().startswith("version:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def list_installed_packages() -> list[dict]:
+    manifest = load_manifest()
+    packages: list[dict] = []
+    seen_names: set[str] = set()
+    for requirement in manifest.get("approved_packages") or []:
+        name = package_name(requirement)
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+        version = _pip_show_version(name)
+        entry: dict = {"requirement": requirement, "name": name}
+        if version:
+            entry["version"] = version
+        packages.append(entry)
+    return packages
+
+
 def pip_install(requirements: list[str]) -> tuple[bool, str]:
     if not requirements:
         return True, "No packages to install."
@@ -88,6 +126,32 @@ def pip_install(requirements: list[str]) -> tuple[bool, str]:
     manifest["approved_packages"] = sorted(approved)
     save_manifest(manifest)
     return True, output
+
+
+def pip_uninstall(package_name_str: str) -> tuple[bool, str]:
+    name = package_name(package_name_str)
+    if not name:
+        return False, "Invalid package name."
+
+    manifest = load_manifest()
+    approved = manifest.get("approved_packages") or []
+    matching = [req for req in approved if package_name(req) == name]
+    if not matching:
+        return False, f"Package '{name}' is not in the approved manifest."
+
+    ensure_venv()
+    py = venv_python()
+    cmd = [str(py), "-m", "pip", "uninstall", "-y", name]
+    logger.info("Running pip uninstall: %s", name)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    output = (proc.stdout or "") + (proc.stderr or "")
+    if proc.returncode != 0:
+        return False, output
+
+    remaining = [req for req in approved if package_name(req) != name]
+    manifest["approved_packages"] = sorted(remaining)
+    save_manifest(manifest)
+    return True, output or f"Uninstalled {name}."
 
 
 def _is_tool_module(file: Path) -> bool:

@@ -27,12 +27,14 @@ from debug_log import (
     log_error,
     log_generated_code,
     log_pip_install,
+    log_plan,
     log_sandbox,
     log_stream_delta,
     log_tool_execution,
 )
 from litellm_client import (
     SSE_HEADERS,
+    ThinkStreamParser,
     extract_stream_delta,
     extract_stream_tool_calls,
     merge_tool_call_delta,
@@ -41,16 +43,21 @@ from litellm_client import (
     stream_chat_completion,
     tool_calls_from_acc,
 )
-from runtime_client import runtime_health, set_runtime_url
+from runtime_client import (
+    runtime_health,
+    runtime_list_pip_packages,
+    runtime_uninstall_pip_package,
+    set_runtime_url,
+)
 from sandbox import check_docker_available, verify_tool_in_sandbox
 from tool_creator import (
-    draft_tool_edit_plan,
-    draft_tool_plan,
+    draft_tool_edit_plan_stream,
+    draft_tool_plan_stream,
     fix_validation_errors,
     generate_tool_code_stream,
     parse_generated_tool_response,
     repair_generated_tool_response,
-    revise_tool_plan,
+    revise_tool_plan_stream,
     validate_test_code,
 )
 from tools_engine import (
@@ -58,6 +65,7 @@ from tools_engine import (
     alist_tool_summaries,
     delete_tool_async,
     execute_dynamic_tool,
+    get_package_usage,
     prepare_agent_messages,
     read_tool_file,
     read_tool_requirements,
@@ -78,6 +86,9 @@ LITE_MODEL = (
 TOOL_CREATOR_MODEL = (
     os.environ.get("TOOL_CREATOR_MODEL", "").strip()
     or os.environ.get("SECOND_MODEL", "").strip()
+)
+LITE_MODEL_REASONING_EFFORT = (
+    os.environ.get("LITE_MODEL_REASONING_EFFORT", "low").strip() or None
 )
 TOOL_RUNTIME_URL = os.environ.get("TOOL_RUNTIME_URL", "http://tool-runtime:8090").rstrip(
     "/"
@@ -173,6 +184,7 @@ async def stream_lite_model_turn(
     content_acc = ""
     reasoning_acc = ""
     saw_tool_call = False
+    think_parser = ThinkStreamParser()
 
     log_debug(run_id, "LITE_MODEL", f"streaming completion model={lite_model}")
 
@@ -182,6 +194,7 @@ async def stream_lite_model_turn(
         lite_model,
         working_messages,
         tools=tools,
+        reasoning_effort=LITE_MODEL_REASONING_EFFORT,
     ):
         tc_deltas = extract_stream_tool_calls(chunk)
         if tc_deltas:
@@ -189,7 +202,7 @@ async def stream_lite_model_turn(
             merge_tool_call_delta(tool_calls_acc, tc_deltas)
             log_stream_delta(run_id, "lite_model", "tool_call_fragment", str(tc_deltas))
 
-        delta = extract_stream_delta(chunk)
+        delta = extract_stream_delta(chunk, think_parser=think_parser)
         if delta["reasoning"]:
             reasoning_acc += delta["reasoning"]
             log_stream_delta(run_id, "lite_model", "reasoning", delta["reasoning"])
@@ -288,6 +301,50 @@ def tool_build_log(run_id: str, message: str, *, level: str = "info") -> str:
             "message": message,
         }
     )
+
+
+async def stream_plan_draft_events(
+    run_id: str,
+    tool_name: str,
+    plan_stream,
+    *,
+    kind: str = "create",
+    plan_id: str = "",
+    out: dict | None = None,
+):
+    """Stream plan drafting; yield SSE strings. Accumulated plan is stored in out['plan']."""
+    if out is None:
+        out = {}
+    out["plan"] = ""
+
+    started = {
+        "ada_event": "tool_plan_draft_started",
+        "run_id": run_id,
+        "tool_name": tool_name,
+        "kind": kind,
+    }
+    if plan_id:
+        started["plan_id"] = plan_id
+    yield sse_data(started)
+
+    async for chunk_kind, delta in plan_stream:
+        if chunk_kind == "reasoning":
+            yield sse_data(
+                {
+                    "ada_event": "tool_plan_thinking_delta",
+                    "run_id": run_id,
+                    "delta": delta,
+                }
+            )
+        elif chunk_kind == "content":
+            out["plan"] += delta
+            yield sse_data(
+                {
+                    "ada_event": "tool_plan_content_delta",
+                    "run_id": run_id,
+                    "delta": delta,
+                }
+            )
 
 
 async def run_agent_stream(
@@ -404,14 +461,24 @@ async def run_agent_stream(
                             yield event
                         return
 
-                    plan = await draft_tool_plan(
+                    plan_out: dict[str, str] = {}
+                    async for event in stream_plan_draft_events(
+                        run_id,
                         tool_name,
-                        description,
-                        tool_creator_model,
-                        litellm_url=LITELLM_URL,
-                        headers=litellm_headers(),
-                        run_id=run_id,
-                    )
+                        draft_tool_plan_stream(
+                            tool_name,
+                            description,
+                            tool_creator_model,
+                            litellm_url=LITELLM_URL,
+                            headers=litellm_headers(),
+                            run_id=run_id,
+                        ),
+                        kind="create",
+                        out=plan_out,
+                    ):
+                        yield event
+                    plan = plan_out.get("plan", "")
+                    log_plan(run_id, tool_name=tool_name, plan=plan, action="drafted")
 
                     if is_run_cancelled(run_id) or await request.is_disconnected():
                         for event in cancelled_events(
@@ -512,16 +579,26 @@ async def run_agent_stream(
                         model=tool_creator_model,
                     )
 
-                    plan = await draft_tool_edit_plan(
+                    plan_out: dict[str, str] = {}
+                    async for event in stream_plan_draft_events(
+                        run_id,
                         tool_name,
-                        description,
-                        existing_code,
-                        existing_reqs,
-                        tool_creator_model,
-                        litellm_url=LITELLM_URL,
-                        headers=litellm_headers(),
-                        run_id=run_id,
-                    )
+                        draft_tool_edit_plan_stream(
+                            tool_name,
+                            description,
+                            existing_code,
+                            existing_reqs,
+                            tool_creator_model,
+                            litellm_url=LITELLM_URL,
+                            headers=litellm_headers(),
+                            run_id=run_id,
+                        ),
+                        kind="edit",
+                        out=plan_out,
+                    ):
+                        yield event
+                    plan = plan_out.get("plan", "")
+                    log_plan(run_id, tool_name=tool_name, plan=plan, action="edit_drafted")
 
                     yield process_step(
                         run_id,
@@ -669,6 +746,62 @@ async def remove_tool(tool_name: str) -> dict:
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {"status": "deleted", "tool_name": tool_name}
+
+
+def _attach_package_usage(packages: list[dict]) -> list[dict]:
+    usage = get_package_usage()
+    enriched: list[dict] = []
+    for pkg in packages:
+        name = (pkg.get("name") or "").lower()
+        enriched.append({**pkg, "used_by": usage.get(name, [])})
+    return enriched
+
+
+@app.get("/api/pip/packages")
+async def list_pip_packages() -> dict:
+    try:
+        packages = await runtime_list_pip_packages()
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Tool runtime unreachable: {exc}",
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=exc.response.status_code,
+            detail=exc.response.text,
+        ) from exc
+    return {"packages": _attach_package_usage(packages)}
+
+
+@app.delete("/api/pip/packages/{package_name}")
+async def uninstall_pip_package(package_name: str) -> dict:
+    name = package_name.strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="Package name is required.")
+
+    usage = get_package_usage()
+    dependents = usage.get(name, [])
+    if dependents:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": f"Package '{name}' is required by installed tools.",
+                "used_by": dependents,
+            },
+        )
+
+    try:
+        packages = await runtime_uninstall_pip_package(name)
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Tool runtime unreachable: {exc}",
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {"status": "deleted", "package_name": name, "packages": _attach_package_usage(packages)}
 
 
 @app.get("/api/models")
@@ -1283,16 +1416,27 @@ async def revise_tool(request: Request, payload: dict = Body(...)) -> StreamingR
             return
 
         try:
-            revised_plan = await revise_tool_plan(
+            plan_out: dict[str, str] = {}
+            async for event in stream_plan_draft_events(
+                run_id,
                 tool_name,
-                plan_data["description"],
-                plan_data["plan"],
-                feedback,
-                creator_model,
-                litellm_url=LITELLM_URL,
-                headers=litellm_headers(),
-                run_id=run_id,
-            )
+                revise_tool_plan_stream(
+                    tool_name,
+                    plan_data["description"],
+                    plan_data["plan"],
+                    feedback,
+                    creator_model,
+                    litellm_url=LITELLM_URL,
+                    headers=litellm_headers(),
+                    run_id=run_id,
+                ),
+                kind=plan_data.get("kind", "create"),
+                plan_id=plan_id,
+                out=plan_out,
+            ):
+                yield event
+            revised_plan = plan_out.get("plan", "")
+            log_plan(run_id, tool_name=tool_name, plan=revised_plan, action="revised")
         except (RuntimeError, ValueError) as exc:
             yield step(
                 "plan_revise",

@@ -66,6 +66,28 @@ async def fetch_runtime_manifest() -> dict:
         return response.json()
 
 
+async def runtime_list_pip_packages() -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(f"{TOOL_RUNTIME_URL}/pip/packages")
+        response.raise_for_status()
+        return response.json().get("packages") or []
+
+
+async def runtime_uninstall_pip_package(name: str) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        response = await client.delete(
+            f"{TOOL_RUNTIME_URL}/pip/packages/{name}",
+        )
+        if response.status_code != 200:
+            detail = response.text
+            try:
+                detail = response.json().get("detail", detail)
+            except Exception:
+                pass
+            raise RuntimeError(detail)
+        return response.json().get("packages") or []
+
+
 async def runtime_run_tool(name: str, arguments: dict) -> str:
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(

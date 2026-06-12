@@ -14,8 +14,11 @@ const systemInput = document.getElementById("system-input");
 const systemPanel = document.getElementById("system-panel");
 const processRunsEl = document.getElementById("process-runs");
 const toolsListEl = document.getElementById("tools-list");
+const pipPackagesListEl = document.getElementById("pip-packages-list");
+const toolsPanelTitleEl = document.getElementById("tools-panel-title");
 const processRunCountEl = document.getElementById("process-run-count");
 const toolsCountEl = document.getElementById("tools-count");
+const pipPackagesCountEl = document.getElementById("pip-packages-count");
 
 const CHAT_MODEL_STORAGE_KEY = "ada-si-chat-model";
 const SECOND_MODEL_STORAGE_KEY = "ada-si-second-model";
@@ -41,6 +44,7 @@ let abortController = null;
 let runAbortControllers = new Map();
 let renderScheduled = false;
 let pendingRender = null;
+let activeSidePanelTab = "tools";
 
 marked.setOptions({
   gfm: true,
@@ -137,9 +141,169 @@ function updateProcessRunCount() {
   processRunCountEl.classList.remove("hidden");
 }
 
+function packagesEmptyStateHtml() {
+  return `
+    <div class="empty-state">
+      <div class="empty-state-icon" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"/>
+        </svg>
+      </div>
+      <p class="empty-state-title">No approved packages yet</p>
+      <p class="empty-state-text">Packages appear here after you approve pip installs during tool builds.</p>
+    </div>
+  `;
+}
+
+function iconPackage() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+  </svg>`;
+}
+
 function updateToolsCount(count) {
   if (!toolsCountEl) return;
   toolsCountEl.textContent = String(count);
+}
+
+function updatePackagesCount(count) {
+  if (!pipPackagesCountEl) return;
+  pipPackagesCountEl.textContent = String(count);
+}
+
+function switchSidePanelTab(tab) {
+  activeSidePanelTab = tab;
+  document.querySelectorAll(".panel-tab").forEach((btn) => {
+    const isActive = btn.dataset.panelTab === tab;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-selected", isActive ? "true" : "false");
+  });
+
+  if (toolsListEl) toolsListEl.classList.toggle("hidden", tab !== "tools");
+  if (pipPackagesListEl) pipPackagesListEl.classList.toggle("hidden", tab !== "packages");
+  if (toolsPanelTitleEl) {
+    toolsPanelTitleEl.textContent = tab === "packages" ? "Packages" : "Tools";
+  }
+  if (toolsCountEl) toolsCountEl.classList.toggle("hidden", tab !== "tools");
+  if (pipPackagesCountEl) pipPackagesCountEl.classList.toggle("hidden", tab !== "packages");
+
+  if (tab === "packages") {
+    refreshPackagesPanel();
+  }
+}
+
+function renderPackagesPanel(packages) {
+  const list = packages || [];
+  updatePackagesCount(list.length);
+  if (!pipPackagesListEl) return;
+  pipPackagesListEl.innerHTML = "";
+  if (list.length === 0) {
+    pipPackagesListEl.innerHTML = packagesEmptyStateHtml();
+    return;
+  }
+
+  for (const pkg of list) {
+    const usedBy = pkg.used_by || [];
+    const inUse = usedBy.length > 0;
+    const card = document.createElement("div");
+    card.className = "pip-package-card";
+    card.dataset.packageName = pkg.name;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "tool-delete-btn";
+    deleteBtn.title = inUse
+      ? `Required by: ${usedBy.join(", ")}`
+      : "Uninstall package";
+    deleteBtn.innerHTML = iconTrash();
+    deleteBtn.disabled = inUse;
+    if (!inUse) {
+      deleteBtn.addEventListener("click", () => deletePipPackage(pkg.name, card));
+    }
+
+    const header = document.createElement("div");
+    header.className = "tool-card-header";
+    header.innerHTML = `<span class="tool-card-icon">${iconPackage()}</span>`;
+
+    const nameEl = document.createElement("h3");
+    nameEl.className = "tool-card-name";
+    nameEl.textContent = pkg.requirement || pkg.name;
+    header.appendChild(nameEl);
+
+    const versionEl = document.createElement("p");
+    versionEl.className = "pip-package-version";
+    versionEl.textContent = pkg.version ? `Installed: v${pkg.version}` : "Installed in shared venv";
+
+    const usageEl = document.createElement("p");
+    usageEl.className = "tool-card-desc";
+    usageEl.textContent = inUse
+      ? `Used by: ${usedBy.join(", ")}`
+      : "Not used by any tool";
+
+    card.appendChild(deleteBtn);
+    card.appendChild(header);
+    card.appendChild(versionEl);
+    card.appendChild(usageEl);
+    pipPackagesListEl.appendChild(card);
+  }
+}
+
+async function refreshPackagesPanel() {
+  try {
+    const response = await fetch("/api/pip/packages");
+    if (!response.ok) {
+      throw new Error(parseErrorMessage(await response.text()));
+    }
+    const data = await response.json();
+    renderPackagesPanel(data.packages || []);
+  } catch (error) {
+    if (pipPackagesListEl) {
+      pipPackagesListEl.innerHTML = `
+        <div class="empty-state">
+          <p class="empty-state-title">Could not load packages</p>
+          <p class="empty-state-text">${escapeHtml(error.message)}</p>
+        </div>
+      `;
+    }
+    updatePackagesCount(0);
+  }
+}
+
+async function deletePipPackage(packageName, cardEl) {
+  if (
+    !confirm(
+      `Uninstall "${packageName}" from the shared tool runtime venv? This cannot be undone.`,
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `/api/pip/packages/${encodeURIComponent(packageName)}`,
+      { method: "DELETE" },
+    );
+    if (!response.ok) {
+      throw new Error(parseErrorMessage(await response.text()));
+    }
+    cardEl.remove();
+    if (!pipPackagesListEl.querySelector(".pip-package-card")) {
+      pipPackagesListEl.innerHTML = packagesEmptyStateHtml();
+      updatePackagesCount(0);
+    } else {
+      updatePackagesCount(pipPackagesListEl.querySelectorAll(".pip-package-card").length);
+    }
+    setStatus(`Package "${packageName}" uninstalled.`);
+  } catch (error) {
+    setStatus(`Uninstall failed: ${error.message}`, true);
+  }
+}
+
+function maybeRefreshPackagesPanel() {
+  if (activeSidePanelTab === "packages") {
+    refreshPackagesPanel();
+  }
 }
 
 function clearProcessRuns() {
@@ -411,6 +575,7 @@ async function deleteTool(toolName, cardEl) {
     }
     await loadConfig();
     setStatus(`Tool "${toolName}" deleted.`);
+    maybeRefreshPackagesPanel();
   } catch (error) {
     setStatus(`Delete failed: ${error.message}`, true);
   }
@@ -437,7 +602,10 @@ function parseErrorMessage(raw) {
   if (!raw) return "Unknown error";
   try {
     const json = JSON.parse(raw);
-    return json.detail || json.error?.message || json.message || raw;
+    const detail = json.detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object" && detail.message) return detail.message;
+    return json.error?.message || json.message || raw;
   } catch {
     return raw;
   }
@@ -555,14 +723,6 @@ function enhanceCodeBlocks(container) {
   });
 }
 
-function createThinkingIndicator() {
-  const el = document.createElement("div");
-  el.className = "thinking-indicator";
-  el.innerHTML =
-    'Thinking <span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>';
-  return el;
-}
-
 function createThinkingBlock(reasoningText, { open = true, streaming = false } = {}) {
   const details = document.createElement("details");
   details.className = "thinking-block";
@@ -577,7 +737,23 @@ function createThinkingBlock(reasoningText, { open = true, streaming = false } =
 
   details.appendChild(summary);
   details.appendChild(content);
-  return { details, content };
+  return { details, content, summary };
+}
+
+function extractReasoningFromDelta(delta) {
+  let reasoning =
+    delta.reasoning_content || delta.reasoning || delta.thinking || "";
+
+  const blocks = delta.thinking_blocks;
+  if (Array.isArray(blocks)) {
+    reasoning += blocks
+      .map((block) =>
+        typeof block === "string" ? block : block.thinking || block.text || "",
+      )
+      .join("");
+  }
+
+  return reasoning;
 }
 
 function createUserMessage(content) {
@@ -632,11 +808,11 @@ function createAssistantMessage() {
   const body = document.createElement("div");
   body.className = "message-body";
 
-  const indicator = createThinkingIndicator();
-  body.appendChild(indicator);
+  const block = createThinkingBlock("", { open: true, streaming: true });
 
   const contentEl = document.createElement("div");
   contentEl.className = "message-content hidden";
+  body.appendChild(block.details);
   body.appendChild(contentEl);
 
   el.appendChild(header);
@@ -650,10 +826,10 @@ function createAssistantMessage() {
     el,
     row,
     body,
-    indicator,
+    thinkingBlock: block.details,
+    thinkingContent: block.content,
+    thinkingSummary: block.summary,
     contentEl,
-    thinkingBlock: null,
-    thinkingContent: null,
     copyBtn,
     reasoningText: "",
     assistantText: "",
@@ -676,31 +852,28 @@ function scheduleAssistantRender(state) {
 
 function renderAssistantState(state) {
   if (state.hasReasoning && state.reasoningText) {
-    if (!state.thinkingBlock) {
-      state.indicator.classList.add("hidden");
-      const block = createThinkingBlock(state.reasoningText, {
-        open: !state.hasContent,
-        streaming: !state.hasContent,
-      });
-      state.thinkingBlock = block.details;
-      state.thinkingContent = block.content;
-      state.body.insertBefore(block.details, state.contentEl);
+    state.thinkingBlock.classList.remove("hidden");
+    state.thinkingContent.textContent = state.reasoningText;
+    state.thinkingContent.scrollTop = state.thinkingContent.scrollHeight;
+    if (state.hasContent) {
+      state.thinkingBlock.open = false;
+      state.thinkingSummary.textContent = "Thinking";
     } else {
-      state.thinkingContent.textContent = state.reasoningText;
-      if (state.hasContent && state.thinkingBlock.open) {
-        state.thinkingBlock.open = false;
-        state.thinkingBlock.querySelector("summary").textContent = "Thinking";
-      }
+      state.thinkingBlock.open = true;
+      state.thinkingSummary.textContent = "Thinking...";
     }
+  } else if (!state.hasContent) {
+    state.thinkingBlock.classList.remove("hidden");
+    state.thinkingBlock.open = true;
+    state.thinkingSummary.textContent = "Thinking...";
+  } else {
+    state.thinkingBlock.classList.add("hidden");
   }
 
   if (state.hasContent) {
-    state.indicator.classList.add("hidden");
     state.contentEl.classList.remove("hidden");
     state.contentEl.innerHTML = renderMarkdown(state.assistantText);
     enhanceCodeBlocks(state.contentEl);
-  } else if (!state.hasReasoning) {
-    state.indicator.classList.remove("hidden");
   }
 
   scrollToBottom();
@@ -712,11 +885,14 @@ function finalizeAssistantMessage(state) {
     state.hasContent = true;
   }
 
-  state.indicator.classList.add("hidden");
   renderAssistantState(state);
 
   if (state.thinkingBlock) {
-    state.thinkingBlock.querySelector("summary").textContent = "Thinking";
+    if (state.hasReasoning && state.reasoningText) {
+      state.thinkingSummary.textContent = "Thinking";
+    } else {
+      state.thinkingBlock.classList.add("hidden");
+    }
   }
 
   state.copyBtn.classList.remove("hidden");
@@ -730,8 +906,7 @@ function finalizeAssistantMessage(state) {
 }
 
 function parseStreamDelta(delta, state) {
-  const reasoning =
-    delta.reasoning_content || delta.reasoning || delta.thinking || "";
+  const reasoning = extractReasoningFromDelta(delta);
   const content = delta.content || "";
 
   if (reasoning) {
@@ -916,6 +1091,181 @@ function updateToolPlanCardContent(card, plan) {
   if (feedbackInput) feedbackInput.value = "";
   updateScrollShadow(card);
   focusActiveToolCard(card, { collapseOthers: false });
+}
+
+function findPlanDraftCard({ run_id, plan_id }) {
+  if (plan_id) {
+    const byPlan = document.querySelector(
+      `.tool-plan-card[data-plan-id="${plan_id}"]`,
+    );
+    if (byPlan) return byPlan;
+  }
+  if (run_id) {
+    return document.querySelector(
+      `.tool-plan-card[data-run-id="${run_id}"][data-plan-draft="true"]`,
+    );
+  }
+  return null;
+}
+
+function appendToolPlanThinking(ui, delta) {
+  if (!ui || !delta) return;
+  ui.thinkingBlock.classList.remove("hidden");
+  ui.thinkingContent.textContent += delta;
+  ui.thinkingContent.scrollTop = ui.thinkingContent.scrollHeight;
+  if (ui.planText) {
+    ui.thinkingSummary.textContent = "Thinking";
+    ui.thinkingBlock.open = false;
+  } else {
+    ui.thinkingBlock.open = true;
+    ui.thinkingSummary.textContent = "Thinking...";
+  }
+  scrollToBottom();
+}
+
+function enterPlanDraftMode(card, json) {
+  const isEdit = json.kind === "edit";
+  const badgeText = isEdit ? "Drafting tool edit plan" : "Drafting tool plan";
+  card.dataset.planDraft = "true";
+
+  const badge = card.querySelector(".tool-plan-badge");
+  if (badge) badge.textContent = badgeText;
+
+  let thinkingBlock = card.querySelector(".tool-plan-draft-thinking");
+  if (!thinkingBlock) {
+    const block = createThinkingBlock("", { open: true, streaming: true });
+    block.details.classList.add("tool-plan-draft-thinking");
+    const bodyWrap = card.querySelector(".tool-plan-body-wrap");
+    if (bodyWrap) {
+      bodyWrap.parentNode.insertBefore(block.details, bodyWrap);
+    }
+    thinkingBlock = block.details;
+    card._draftUi = {
+      card,
+      thinkingBlock: block.details,
+      thinkingContent: block.content,
+      thinkingSummary: block.summary,
+      planBody: card.querySelector(".tool-plan-body"),
+      planText: "",
+    };
+  }
+
+  if (thinkingBlock && !card._draftUi) {
+    card._draftUi = {
+      card,
+      thinkingBlock,
+      thinkingContent: thinkingBlock.querySelector(".thinking-content"),
+      thinkingSummary: thinkingBlock.querySelector("summary"),
+      planBody: card.querySelector(".tool-plan-body"),
+      planText: "",
+    };
+  }
+
+  if (card._draftUi) {
+    card._draftUi.thinkingContent.textContent = "";
+    card._draftUi.thinkingBlock.open = true;
+    card._draftUi.thinkingSummary.textContent = "Thinking...";
+    card._draftUi.thinkingBlock.classList.remove("hidden");
+    card._draftUi.planText = "";
+    if (card._draftUi.planBody) {
+      card._draftUi.planBody.textContent = "";
+    }
+  }
+
+  card.querySelector(".tool-plan-actions")?.classList.add("hidden");
+  card.querySelector(".tool-plan-feedback")?.classList.add("hidden");
+  card.querySelector(".tool-plan-code-panel")?.classList.add("hidden");
+  return card._draftUi;
+}
+
+function ensureToolPlanDraftCard(json) {
+  let card = findPlanDraftCard(json);
+  if (card?._draftUi) return card._draftUi;
+  if (card) return enterPlanDraftMode(card, json);
+
+  hideWelcome();
+  const isEdit = json.kind === "edit";
+  const badgeText = isEdit ? "Drafting tool edit plan" : "Drafting tool plan";
+
+  card = document.createElement("article");
+  card.className = "tool-plan-card tool-plan-draft";
+  card.dataset.runId = json.run_id || "";
+  card.dataset.planDraft = "true";
+  card.dataset.toolName = json.tool_name || "";
+  if (json.kind) card.dataset.planKind = json.kind;
+  if (json.plan_id) card.dataset.planId = json.plan_id;
+
+  const header = document.createElement("div");
+  header.className = "tool-plan-header";
+  header.innerHTML = `
+    <span class="tool-plan-badge${isEdit ? " tool-plan-badge-edit" : ""}">${escapeHtml(badgeText)}</span>
+    <h3 class="tool-plan-title">${escapeHtml(json.tool_name || "Tool")}</h3>
+  `;
+
+  const bodyWrap = document.createElement("div");
+  bodyWrap.className = "tool-plan-body-wrap";
+
+  const block = createThinkingBlock("", { open: true, streaming: true });
+  block.details.classList.add("tool-plan-draft-thinking");
+
+  const body = document.createElement("div");
+  body.className = "tool-plan-body";
+  bodyWrap.appendChild(body);
+
+  ensureToolCardShell(card);
+  const shell = getToolCardShell(card);
+  shell.chrome.appendChild(header);
+  shell.scroll.appendChild(block.details);
+  shell.scroll.appendChild(bodyWrap);
+
+  card._draftUi = {
+    card,
+    thinkingBlock: block.details,
+    thinkingContent: block.content,
+    thinkingSummary: block.summary,
+    planBody: body,
+    planText: "",
+  };
+
+  messagesEl.appendChild(card);
+  focusActiveToolCard(card, { collapseOthers: true });
+  scrollToBottom(true);
+  return card._draftUi;
+}
+
+function handlePlanDraftThinkingDelta(json) {
+  const card = findPlanDraftCard(json);
+  if (!card) {
+    ensureToolPlanDraftCard(json);
+  }
+  const ui = findPlanDraftCard(json)?._draftUi;
+  appendToolPlanThinking(ui, json.delta || "");
+}
+
+function handlePlanDraftContentDelta(json) {
+  let card = findPlanDraftCard(json);
+  if (!card) {
+    ensureToolPlanDraftCard(json);
+    card = findPlanDraftCard(json);
+  }
+  const ui = card?._draftUi;
+  if (!ui) return;
+  ui.planText += json.delta || "";
+  ui.planBody.textContent = ui.planText;
+  scrollToBottom();
+}
+
+function completePlanDraftCard(card) {
+  card.dataset.planDraft = "";
+  card.querySelector(".tool-plan-actions")?.classList.remove("hidden");
+  card.querySelector(".tool-plan-feedback")?.classList.remove("hidden");
+  const ui = card._draftUi;
+  if (ui?.thinkingContent?.textContent) {
+    ui.thinkingSummary.textContent = "Thinking";
+    ui.thinkingBlock.open = false;
+  } else {
+    ui?.thinkingBlock?.classList.add("hidden");
+  }
 }
 
 const VIEWER_PHASES = [
@@ -1427,6 +1777,9 @@ function handleBuildSseEvent(json, viewerUi, card) {
   const activeCard = card || viewerUi?.card;
   if (json.ada_event === "tool_build_phase" && viewerUi) {
     updateViewerPhase(viewerUi, json.phase, json.status);
+    if (json.phase === "pip_review" && json.status === "done") {
+      maybeRefreshPackagesPanel();
+    }
     if (
       activeCard &&
       (json.status === "error" ||
@@ -1523,36 +1876,8 @@ function showToolCodeReady(codeUi, { tool_code, test_code }) {
   enhanceCodeBlocks(codeUi.panel);
 }
 
-function renderToolPlanCard({ plan_id, tool_name, plan, run_id, kind }) {
-  hideWelcome();
-
-  const isEdit = kind === "edit";
-  const badgeText = isEdit ? "Tool edit proposal" : "Tool proposal";
-
-  const card = document.createElement("article");
-  card.className = "tool-plan-card";
-  card.dataset.planId = plan_id;
-  card.dataset.toolName = tool_name;
-  if (run_id) card.dataset.runId = run_id;
-  if (kind) card.dataset.planKind = kind;
-
-  const header = document.createElement("div");
-  header.className = "tool-plan-header";
-  header.innerHTML = `
-    <span class="tool-plan-badge${isEdit ? " tool-plan-badge-edit" : ""}">${escapeHtml(badgeText)}</span>
-    <h3 class="tool-plan-title">${escapeHtml(tool_name)}</h3>
-  `;
-
-  const bodyWrap = document.createElement("div");
-  bodyWrap.className = "tool-plan-body-wrap";
-
-  const body = document.createElement("div");
-  body.className = "tool-plan-body";
-  body.innerHTML = renderMarkdown(plan);
-  enhanceCodeBlocks(body);
-  bodyWrap.appendChild(body);
-
-  const codeUi = createToolPlanCodePanel();
+function attachToolPlanActions(card, { plan_id, run_id, tool_name }) {
+  if (card.querySelector(".tool-plan-actions")) return;
 
   const feedbackSection = document.createElement("div");
   feedbackSection.className = "tool-plan-feedback";
@@ -1614,13 +1939,90 @@ function renderToolPlanCard({ plan_id, tool_name, plan, run_id, kind }) {
   actions.appendChild(reviseBtn);
   actions.appendChild(discardBtn);
 
+  const shell = getToolCardShell(card);
+  shell.scroll.appendChild(feedbackSection);
+  shell.actions.append(actions, resultEl);
+}
+
+function renderToolPlanCard({ plan_id, tool_name, plan, run_id, kind }) {
+  hideWelcome();
+
+  const existingDraft = run_id
+    ? document.querySelector(
+        `.tool-plan-card[data-run-id="${run_id}"][data-plan-draft="true"]`,
+      )
+    : null;
+
+  if (existingDraft) {
+    existingDraft.dataset.planId = plan_id;
+    if (kind) existingDraft.dataset.planKind = kind;
+
+    const isEdit = kind === "edit";
+    const badge = existingDraft.querySelector(".tool-plan-badge");
+    if (badge) {
+      badge.textContent = isEdit ? "Tool edit proposal" : "Tool proposal";
+      badge.classList.toggle("tool-plan-badge-edit", isEdit);
+    }
+
+    const title = existingDraft.querySelector(".tool-plan-title");
+    if (title) title.textContent = tool_name;
+
+    completePlanDraftCard(existingDraft);
+    updateToolPlanCardContent(existingDraft, plan);
+
+    if (!existingDraft._codeUi) {
+      const codeUi = createToolPlanCodePanel();
+      existingDraft._codeUi = codeUi;
+      getToolCardShell(existingDraft).scroll.appendChild(codeUi.panel);
+    }
+
+    if (!existingDraft.querySelector(".tool-plan-actions")) {
+      attachToolPlanActions(existingDraft, {
+        plan_id,
+        run_id,
+        tool_name,
+        kind,
+      });
+    }
+
+    return;
+  }
+
+  const isEdit = kind === "edit";
+  const badgeText = isEdit ? "Tool edit proposal" : "Tool proposal";
+
+  const card = document.createElement("article");
+  card.className = "tool-plan-card";
+  card.dataset.planId = plan_id;
+  card.dataset.toolName = tool_name;
+  if (run_id) card.dataset.runId = run_id;
+  if (kind) card.dataset.planKind = kind;
+
+  const header = document.createElement("div");
+  header.className = "tool-plan-header";
+  header.innerHTML = `
+    <span class="tool-plan-badge${isEdit ? " tool-plan-badge-edit" : ""}">${escapeHtml(badgeText)}</span>
+    <h3 class="tool-plan-title">${escapeHtml(tool_name)}</h3>
+  `;
+
+  const bodyWrap = document.createElement("div");
+  bodyWrap.className = "tool-plan-body-wrap";
+
+  const body = document.createElement("div");
+  body.className = "tool-plan-body";
+  body.innerHTML = renderMarkdown(plan);
+  enhanceCodeBlocks(body);
+  bodyWrap.appendChild(body);
+
+  const codeUi = createToolPlanCodePanel();
+
   card._codeUi = codeUi;
 
   ensureToolCardShell(card);
   const shell = getToolCardShell(card);
   shell.chrome.appendChild(header);
-  shell.scroll.append(bodyWrap, codeUi.panel, feedbackSection);
-  shell.actions.append(actions, resultEl);
+  shell.scroll.append(bodyWrap, codeUi.panel);
+  attachToolPlanActions(card, { plan_id, run_id, tool_name });
 
   messagesEl.appendChild(card);
   focusActiveToolCard(card);
@@ -1769,6 +2171,7 @@ async function runPipContinuation(card, pipId, runId, approveBtn, rejectBtn) {
       });
       await loadConfig();
       await refreshToolsPanel();
+      maybeRefreshPackagesPanel();
       setStatus("");
     } else if (buildResult?.status === "failed") {
       const reason = buildResult.reason || "Build failed after pip install.";
@@ -1874,6 +2277,7 @@ async function runToolBuild(card, planId, runId) {
       });
       await loadConfig();
       await refreshToolsPanel();
+      maybeRefreshPackagesPanel();
       setStatus("");
     } else if (buildResult?.status === "pip_pending") {
       setToolPlanCardBusy(card, false);
@@ -1946,6 +2350,13 @@ async function handleToolRevision(
   resultEl.classList.add("hidden");
   setStatus("");
 
+  enterPlanDraftMode(card, {
+    run_id: effectiveRunId,
+    plan_id: planId,
+    tool_name: card.dataset.toolName,
+    kind: card.dataset.planKind,
+  });
+
   try {
     const response = await fetch("/api/revise_tool", {
       method: "POST",
@@ -1979,6 +2390,18 @@ async function handleToolRevision(
           const json = JSON.parse(payload);
           if (handleAdaEvent(json)) return;
 
+          if (json.ada_event === "tool_plan_draft_started") {
+            ensureToolPlanDraftCard(json);
+            return;
+          }
+          if (json.ada_event === "tool_plan_thinking_delta") {
+            handlePlanDraftThinkingDelta(json);
+            return;
+          }
+          if (json.ada_event === "tool_plan_content_delta") {
+            handlePlanDraftContentDelta(json);
+            return;
+          }
           if (json.ada_event === "tool_plan_revised") {
             revisedPlan = json.plan;
           } else if (json.ada_event === "tool_plan_revise_failed") {
@@ -1991,6 +2414,7 @@ async function handleToolRevision(
     }
 
     if (revisedPlan) {
+      completePlanDraftCard(card);
       updateToolPlanCardContent(card, revisedPlan);
       conversation.push({
         role: "assistant",
@@ -2002,10 +2426,12 @@ async function handleToolRevision(
     }
   } catch (error) {
     if (error.name === "AbortError") {
+      completePlanDraftCard(card);
       setToolPlanCardBusy(card, false);
       reviseBtn.textContent = "Request changes";
       return;
     }
+    completePlanDraftCard(card);
     resultEl.classList.remove("hidden");
     resultEl.className = "tool-plan-result error";
     resultEl.textContent = error.message;
@@ -2120,6 +2546,19 @@ async function sendMessage(event) {
           if (json.ada_event === "chat_error") {
             throw new Error(json.detail || "Chat failed.");
           }
+          if (json.ada_event === "tool_plan_draft_started") {
+            state.row.remove();
+            ensureToolPlanDraftCard(json);
+            return;
+          }
+          if (json.ada_event === "tool_plan_thinking_delta") {
+            handlePlanDraftThinkingDelta(json);
+            return;
+          }
+          if (json.ada_event === "tool_plan_content_delta") {
+            handlePlanDraftContentDelta(json);
+            return;
+          }
           if (json.ada_event === "tool_plan_pending") {
             planReceived = true;
             registerBuildSteps(json.run_id || runId);
@@ -2217,6 +2656,15 @@ messageInput.addEventListener("keydown", (event) => {
     event.preventDefault();
     if (!isSending) chatForm.requestSubmit();
   }
+});
+
+document.querySelectorAll(".panel-tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const tab = btn.dataset.panelTab;
+    if (tab && tab !== activeSidePanelTab) {
+      switchSidePanelTab(tab);
+    }
+  });
 });
 
 loadSystemInstructions();
