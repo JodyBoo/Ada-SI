@@ -6,3 +6,5 @@ chat/staging/*
 !chat/staging/.gitkeep
 chat/custom_tools/*.py
 !chat/custom_tools/.gitkeep
+chat/frontend/node_modules/
+chat/frontend/dist/

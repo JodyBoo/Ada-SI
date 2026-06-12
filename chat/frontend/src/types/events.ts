@@ -1,0 +1,282 @@
+export type ChatMessage = {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export type ToolSummary = {
+  name: string
+  description?: string
+}
+
+export type PipPackage = {
+  name: string
+  version?: string
+  used_by?: string[]
+}
+
+export type AppConfig = {
+  lite_model?: string
+  tool_creator_model?: string
+  chat_model?: string
+  second_model?: string
+  tools?: ToolSummary[]
+  docker_available?: boolean
+  docker_message?: string
+  tool_runtime_available?: boolean
+  tool_runtime_url?: string
+}
+
+export type ModelsResponse = {
+  data?: Array<{ id: string }>
+}
+
+export type ProcessStepStatus = 'pending' | 'active' | 'done' | 'error' | 'skipped'
+
+export type ProcessStep = {
+  stepId: string
+  label: string
+  status: ProcessStepStatus
+  model?: string
+  detail?: string
+}
+
+export type ProcessRun = {
+  runId: string
+  prompt: string
+  steps: ProcessStep[]
+}
+
+export type PhaseStatus = 'pending' | 'active' | 'done' | 'error'
+
+export type PipInstallState = {
+  pipId: string
+  packages: string[]
+  alreadyInstalled?: string[]
+  busy?: boolean
+}
+
+export type ToolPlanMode =
+  | 'draft'
+  | 'pending'
+  | 'building'
+  | 'success'
+  | 'collapsed'
+
+export type ToolPlanCardState = {
+  id: string
+  runId: string
+  planId?: string
+  toolName: string
+  kind?: 'edit'
+  mode: ToolPlanMode
+  draftThinking: string
+  draftPlanText: string
+  planMarkdown: string
+  feedback: string
+  busy: boolean
+  resultError?: string
+  viewerPhases: Record<string, PhaseStatus>
+  viewerOutput: string[]
+  codeThinking: string
+  codeStream: string
+  toolCode: string
+  testCode: string
+  codeTab: 'tool' | 'test' | 'output'
+  codePanelTitle: string
+  showCodeTabs: boolean
+  showCodeStream: boolean
+  pipInstall?: PipInstallState
+  collapsedSummary?: string
+  collapsedStatus?: string
+  collapsedStatusClass?: string
+  lastSuccessMessage?: string
+  showRetry: boolean
+}
+
+export type UserFeedItem = {
+  id: string
+  type: 'user'
+  content: string
+}
+
+export type AssistantFeedItem = {
+  id: string
+  type: 'assistant'
+  reasoningText: string
+  content: string
+  streaming: boolean
+  hidden?: boolean
+}
+
+export type ToolPlanFeedItem = {
+  id: string
+  type: 'tool-plan'
+  card: ToolPlanCardState
+}
+
+export type FeedItem = UserFeedItem | AssistantFeedItem | ToolPlanFeedItem
+
+export type AdaEventType =
+  | 'process_step'
+  | 'run_cancelled'
+  | 'tool_plan_draft_started'
+  | 'tool_plan_thinking_delta'
+  | 'tool_plan_content_delta'
+  | 'tool_plan_pending'
+  | 'tool_plan_revised'
+  | 'tool_plan_revise_failed'
+  | 'tool_code_thinking_delta'
+  | 'tool_code_delta'
+  | 'tool_code_ready'
+  | 'tool_build_phase'
+  | 'tool_build_log'
+  | 'pip_install_pending'
+  | 'tool_installed'
+  | 'tool_build_failed'
+  | 'chat_error'
+
+export type ProcessStepEvent = {
+  ada_event: 'process_step'
+  run_id: string
+  step_id: string
+  label: string
+  status: ProcessStepStatus
+  model?: string
+  detail?: string
+}
+
+export type AdaEvent =
+  | ProcessStepEvent
+  | { ada_event: 'run_cancelled'; run_id: string }
+  | {
+      ada_event: 'tool_plan_draft_started'
+      run_id: string
+      plan_id?: string
+      tool_name?: string
+      kind?: 'edit'
+    }
+  | {
+      ada_event: 'tool_plan_thinking_delta'
+      run_id: string
+      plan_id?: string
+      delta?: string
+    }
+  | {
+      ada_event: 'tool_plan_content_delta'
+      run_id: string
+      plan_id?: string
+      delta?: string
+    }
+  | {
+      ada_event: 'tool_plan_pending'
+      run_id: string
+      plan_id: string
+      tool_name: string
+      plan: string
+      kind?: 'edit'
+    }
+  | { ada_event: 'tool_plan_revised'; plan: string }
+  | { ada_event: 'tool_plan_revise_failed'; reason?: string }
+  | { ada_event: 'tool_code_thinking_delta'; delta?: string }
+  | { ada_event: 'tool_code_delta'; delta?: string }
+  | {
+      ada_event: 'tool_code_ready'
+      tool_code: string
+      test_code: string
+    }
+  | {
+      ada_event: 'tool_build_phase'
+      phase: string
+      status: PhaseStatus
+    }
+  | {
+      ada_event: 'tool_build_log'
+      message: string
+      level?: 'info' | 'warn' | 'error'
+    }
+  | {
+      ada_event: 'pip_install_pending'
+      pip_id: string
+      run_id: string
+      tool_name?: string
+      packages?: string[]
+      already_installed?: string[]
+    }
+  | { ada_event: 'tool_installed'; message: string }
+  | {
+      ada_event: 'tool_build_failed'
+      reason?: string
+      logs?: string
+    }
+  | { ada_event: 'chat_error'; run_id?: string; detail?: string }
+
+export type OpenAIStreamChunk = {
+  choices?: Array<{
+    delta?: {
+      content?: string
+      reasoning_content?: string
+      reasoning?: string
+      thinking?: string
+      thinking_blocks?: Array<string | { thinking?: string; text?: string }>
+    }
+  }>
+  ada_event?: AdaEventType
+}
+
+export type StreamPayload = AdaEvent | OpenAIStreamChunk
+
+export function isAdaEvent(payload: StreamPayload): payload is AdaEvent {
+  return typeof (payload as AdaEvent).ada_event === 'string'
+}
+
+export function extractReasoningFromDelta(
+  delta: NonNullable<OpenAIStreamChunk['choices']>[0]['delta'],
+): string {
+  if (!delta) return ''
+  let reasoning = delta.reasoning_content || delta.reasoning || delta.thinking || ''
+  const blocks = delta.thinking_blocks
+  if (Array.isArray(blocks)) {
+    reasoning += blocks
+      .map((block) =>
+        typeof block === 'string' ? block : block.thinking || block.text || '',
+      )
+      .join('')
+  }
+  return reasoning
+}
+
+export function createDefaultViewerPhases(): Record<string, PhaseStatus> {
+  return {
+    generate_code: 'pending',
+    validate_code: 'pending',
+    sandbox_test: 'pending',
+    pip_review: 'pending',
+    runtime_verify: 'pending',
+    install_tool: 'pending',
+  }
+}
+
+export function createToolPlanCard(
+  partial: Partial<ToolPlanCardState> & Pick<ToolPlanCardState, 'id' | 'runId' | 'toolName'>,
+): ToolPlanCardState {
+  return {
+    mode: 'draft',
+    draftThinking: '',
+    draftPlanText: '',
+    planMarkdown: '',
+    feedback: '',
+    busy: false,
+    viewerPhases: createDefaultViewerPhases(),
+    viewerOutput: [],
+    codeThinking: '',
+    codeStream: '',
+    toolCode: '',
+    testCode: '',
+    codeTab: 'tool',
+    codePanelTitle: 'Generating…',
+    showCodeTabs: false,
+    showCodeStream: true,
+    showRetry: false,
+    ...partial,
+  }
+}

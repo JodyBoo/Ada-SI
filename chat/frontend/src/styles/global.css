@@ -1,60 +1,4 @@
-:root {
-  color-scheme: dark;
-  --bg: #0b0d12;
-  --bg-elevated: rgba(22, 26, 36, 0.85);
-  --glass: rgba(23, 27, 38, 0.55);
-  --glass-border: rgba(255, 255, 255, 0.06);
-  --glass-highlight: rgba(255, 255, 255, 0.04);
-  --panel: rgba(22, 26, 36, 0.72);
-  --border: rgba(255, 255, 255, 0.08);
-  --text: #e8ecf3;
-  --muted: #8b95a8;
-  --accent: #5b8cff;
-  --accent-hover: #7aa2ff;
-  --accent-soft: rgba(91, 140, 255, 0.12);
-  --success: #3ecf8e;
-  --success-soft: rgba(62, 207, 142, 0.15);
-  --danger: #ff6b6b;
-  --danger-soft: rgba(255, 107, 107, 0.12);
-  --stop: #e05a5a;
-  --stop-hover: #f07070;
-  --user-bg: rgba(91, 140, 255, 0.1);
-  --assistant-bg: rgba(255, 255, 255, 0.03);
-  --thinking: rgba(255, 255, 255, 0.02);
-  --code-bg: #0d1117;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.35);
-  --shadow-glow: 0 0 24px rgba(91, 140, 255, 0.12);
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-base: 0.9375rem;
-  --text-lg: 1.125rem;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --duration: 180ms;
-  --tool-card-max-h: min(72vh, calc(100vh - 12rem));
-}
-
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
-  font-size: var(--text-base);
-  background:
-    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(91, 140, 255, 0.08), transparent),
-    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(62, 207, 142, 0.04), transparent),
-    var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-}
+@import './tokens.css';
 
 .glass-panel {
   background: var(--glass);
@@ -807,17 +751,6 @@ button:disabled {
   display: none !important;
 }
 
-.message-row {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  animation: fadeIn 0.2s var(--ease);
-}
-
-.message-row.user-row {
-  flex-direction: row-reverse;
-}
-
 .message-avatar {
   flex-shrink: 0;
   width: 28px;
@@ -1125,6 +1058,8 @@ button:disabled {
   animation: fadeIn 0.25s var(--ease);
   align-self: stretch;
   max-width: 100%;
+  flex-shrink: 0;
+  scroll-margin: 1rem 0 5rem;
 }
 
 .tool-plan-card.tool-card-active {
@@ -1145,6 +1080,10 @@ button:disabled {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.tool-plan-card.tool-card-active .tool-card-scroll {
+  min-height: 10rem;
 }
 
 .tool-card-scroll.has-scroll {
@@ -1229,6 +1168,7 @@ button:disabled {
 
 .tool-plan-card.tool-card-collapsed {
   max-height: none;
+  min-height: 3.5rem;
 }
 
 .tool-plan-card.tool-card-collapsed .tool-card-chrome,

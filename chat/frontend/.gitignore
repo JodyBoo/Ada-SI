@@ -1,0 +1,4 @@
+# Frontend build artifacts are generated into chat/static/
+# Run: cd chat/frontend && npm run build
+
+node_modules/
