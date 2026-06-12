@@ -143,6 +143,7 @@ export function useToolBuildStream() {
             plan_id: planId,
             run_id: effectiveRunId,
             tool_creator_model: store.toolCreatorModel,
+            reasoning_effort: store.thinkingEffort,
           }),
           signal: controller.signal,
         })
@@ -217,7 +218,11 @@ export function useToolBuildStream() {
         const response = await fetch('/api/approve_pip', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pip_id: pipId, run_id: effectiveRunId }),
+          body: JSON.stringify({
+            pip_id: pipId,
+            run_id: effectiveRunId,
+            reasoning_effort: store.thinkingEffort,
+          }),
           signal: controller.signal,
         })
 
@@ -323,6 +328,7 @@ export function useToolBuildStream() {
             run_id: effectiveRunId,
             feedback,
             tool_creator_model: store.toolCreatorModel,
+            reasoning_effort: store.thinkingEffort,
           },
           signal: controller.signal,
           onPayload: (json) => {

@@ -90,6 +90,9 @@ TOOL_CREATOR_MODEL = (
 LITE_MODEL_REASONING_EFFORT = (
     os.environ.get("LITE_MODEL_REASONING_EFFORT", "low").strip() or None
 )
+TOOL_CREATOR_REASONING_EFFORT = (
+    os.environ.get("TOOL_CREATOR_REASONING_EFFORT", "high").strip() or "high"
+)
 TOOL_RUNTIME_URL = os.environ.get("TOOL_RUNTIME_URL", "http://tool-runtime:8090").rstrip(
     "/"
 )
@@ -172,11 +175,36 @@ def cancelled_events(run_id: str, step_id: str, *, model: str = "") -> list[str]
     return events
 
 
+def normalize_reasoning_effort(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip().lower()
+    if not cleaned or cleaned in ("off", "none"):
+        return "off"
+    if cleaned in ("low", "medium", "high"):
+        return cleaned
+    return None
+
+
+def resolve_reasoning_effort(
+    value: str | None,
+    *,
+    default: str | None = None,
+) -> str | None:
+    normalized = normalize_reasoning_effort(value)
+    if normalized is not None:
+        return normalized
+    fallback = default or LITE_MODEL_REASONING_EFFORT or "low"
+    return normalize_reasoning_effort(fallback) or fallback
+
+
 async def stream_lite_model_turn(
     run_id: str,
     lite_model: str,
     working_messages: list[dict],
     tools: list[dict],
+    *,
+    reasoning_effort: str | None = None,
 ):
     """Stream one lite-model completion; yield OpenAI SSE strings and final message."""
     chunk_id = new_stream_chunk_id()
@@ -194,7 +222,7 @@ async def stream_lite_model_turn(
         lite_model,
         working_messages,
         tools=tools,
-        reasoning_effort=LITE_MODEL_REASONING_EFFORT,
+        reasoning_effort=reasoning_effort or LITE_MODEL_REASONING_EFFORT,
     ):
         tc_deltas = extract_stream_tool_calls(chunk)
         if tc_deltas:
@@ -353,6 +381,8 @@ async def run_agent_stream(
     tool_creator_model: str,
     messages: list[dict],
     request: Request,
+    *,
+    reasoning_effort: str | None = None,
 ):
     """Async generator that yields SSE strings as each process step occurs."""
     clear_run_cancelled(run_id)
@@ -384,7 +414,7 @@ async def run_agent_stream(
         tool_calls: list[dict] = []
 
         async for item in stream_lite_model_turn(
-            run_id, lite_model, working_messages, tools
+            run_id, lite_model, working_messages, tools, reasoning_effort=reasoning_effort
         ):
             if isinstance(item, str):
                 yield item
@@ -472,6 +502,7 @@ async def run_agent_stream(
                             litellm_url=LITELLM_URL,
                             headers=litellm_headers(),
                             run_id=run_id,
+                            reasoning_effort=reasoning_effort,
                         ),
                         kind="create",
                         out=plan_out,
@@ -592,6 +623,7 @@ async def run_agent_stream(
                             litellm_url=LITELLM_URL,
                             headers=litellm_headers(),
                             run_id=run_id,
+                            reasoning_effort=reasoning_effort,
                         ),
                         kind="edit",
                         out=plan_out,
@@ -727,6 +759,8 @@ async def get_config() -> dict:
         "docker_message": docker_message if not docker_ok else "",
         "tool_runtime_available": (await runtime_health())[0],
         "tool_runtime_url": TOOL_RUNTIME_URL,
+        "lite_model_reasoning_effort": LITE_MODEL_REASONING_EFFORT or "low",
+        "tool_creator_reasoning_effort": TOOL_CREATOR_REASONING_EFFORT,
     }
 
 
@@ -831,6 +865,7 @@ async def chat(request: Request) -> StreamingResponse:
     ).strip()
     messages = body.get("messages")
     run_id = body.get("run_id") or uuid.uuid4().hex
+    reasoning_effort = resolve_reasoning_effort(body.get("reasoning_effort"))
 
     if not lite_model:
         raise HTTPException(status_code=400, detail="No lite model selected.")
@@ -840,7 +875,12 @@ async def chat(request: Request) -> StreamingResponse:
     async def event_stream():
         try:
             async for item in run_agent_stream(
-                run_id, lite_model, tool_creator_model, messages, request
+                run_id,
+                lite_model,
+                tool_creator_model,
+                messages,
+                request,
+                reasoning_effort=reasoning_effort,
             ):
                 if await request.is_disconnected():
                     return
@@ -921,6 +961,11 @@ async def approve_tool(request: Request, payload: dict = Body(...)) -> Streaming
     if not creator_model:
         raise HTTPException(status_code=400, detail="No tool creator model configured.")
 
+    reasoning_effort = resolve_reasoning_effort(
+        payload.get("reasoning_effort"),
+        default=TOOL_CREATOR_REASONING_EFFORT,
+    )
+
     docker_ok, docker_message = check_docker_available()
     if not docker_ok:
         raise HTTPException(status_code=503, detail=docker_message)
@@ -982,6 +1027,7 @@ async def approve_tool(request: Request, payload: dict = Body(...)) -> Streaming
                 headers=litellm_headers(),
                 run_id=run_id,
                 edit_context=edit_context if plan_data.get("kind") == "edit" else None,
+                reasoning_effort=reasoning_effort,
             ):
                 if await cancelled():
                     for event in cancelled_events(
@@ -1039,6 +1085,7 @@ async def approve_tool(request: Request, payload: dict = Body(...)) -> Streaming
                             headers=litellm_headers(),
                             run_id=run_id,
                             edit_context=edit_context,
+                            reasoning_effort=reasoning_effort,
                         )
                         break
                     raise parse_error from exc
@@ -1121,6 +1168,7 @@ async def approve_tool(request: Request, payload: dict = Body(...)) -> Streaming
                         litellm_url=LITELLM_URL,
                         headers=litellm_headers(),
                         run_id=run_id,
+                        reasoning_effort=reasoning_effort,
                     )
                     yield sse_data(
                         {
@@ -1187,6 +1235,7 @@ async def approve_tool(request: Request, payload: dict = Body(...)) -> Streaming
             blog=blog,
             sse_data=sse_data,
             cancelled=cancelled,
+            reasoning_effort=reasoning_effort,
         )
         )
         for level, message in sandbox_notices:
@@ -1238,6 +1287,7 @@ async def approve_tool(request: Request, payload: dict = Body(...)) -> Streaming
             step=step,
             phase=phase,
             sse_data=sse_data,
+            reasoning_effort=reasoning_effort,
         )
         if paused and pause_events:
             log_pip_install(run_id, packages=new_packages, logs="awaiting user approval")
@@ -1262,6 +1312,7 @@ async def approve_tool(request: Request, payload: dict = Body(...)) -> Streaming
             sse_data=sse_data,
             cancelled=cancelled,
             skip_pip=True,
+            reasoning_effort=reasoning_effort,
         ):
             yield event
 
@@ -1289,6 +1340,14 @@ async def approve_pip(request: Request, payload: dict = Body(...)) -> StreamingR
     plan_id = pip_data.get("plan_id", "")
     tool_name = pip_data["tool_name"]
     creator_model = pip_data.get("creator_model", "")
+
+    if not creator_model:
+        raise HTTPException(status_code=400, detail="No tool creator model configured.")
+
+    reasoning_effort = resolve_reasoning_effort(
+        payload.get("reasoning_effort") or pip_data.get("reasoning_effort"),
+        default=TOOL_CREATOR_REASONING_EFFORT,
+    )
 
     async def pip_stream():
         clear_run_cancelled(run_id)
@@ -1337,6 +1396,7 @@ async def approve_pip(request: Request, payload: dict = Body(...)) -> StreamingR
             sse_data=sse_data,
             cancelled=cancelled,
             skip_pip=False,
+            reasoning_effort=reasoning_effort,
         ):
             yield event
 
@@ -1388,6 +1448,11 @@ async def revise_tool(request: Request, payload: dict = Body(...)) -> StreamingR
     if not creator_model:
         raise HTTPException(status_code=400, detail="No tool creator model configured.")
 
+    reasoning_effort = resolve_reasoning_effort(
+        payload.get("reasoning_effort"),
+        default=TOOL_CREATOR_REASONING_EFFORT,
+    )
+
     async def revision_stream():
         clear_run_cancelled(run_id)
         log_build_event(
@@ -1429,6 +1494,7 @@ async def revise_tool(request: Request, payload: dict = Body(...)) -> StreamingR
                     litellm_url=LITELLM_URL,
                     headers=litellm_headers(),
                     run_id=run_id,
+                    reasoning_effort=reasoning_effort,
                 ),
                 kind=plan_data.get("kind", "create"),
                 plan_id=plan_id,

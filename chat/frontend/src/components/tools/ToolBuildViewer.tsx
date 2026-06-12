@@ -23,7 +23,7 @@ export function ToolBuildViewer({ feedId, card }: ToolBuildViewerProps) {
               data-tab="tool"
               onClick={() => updateToolPlanCard(feedId, { codeTab: 'tool', showCodeStream: false })}
             >
-              tool.py
+              skill.py
             </button>
             <button
               type="button"
@@ -31,7 +31,7 @@ export function ToolBuildViewer({ feedId, card }: ToolBuildViewerProps) {
               data-tab="test"
               onClick={() => updateToolPlanCard(feedId, { codeTab: 'test', showCodeStream: false })}
             >
-              test_run.py
+              trial.py
             </button>
             <button
               type="button"
@@ -39,7 +39,7 @@ export function ToolBuildViewer({ feedId, card }: ToolBuildViewerProps) {
               data-tab="output"
               onClick={() => updateToolPlanCard(feedId, { codeTab: 'output', showCodeStream: false })}
             >
-              Output
+              Battle log
             </button>
           </div>
         )}
@@ -50,7 +50,7 @@ export function ToolBuildViewer({ feedId, card }: ToolBuildViewerProps) {
             className="thinking-block tool-viewer-thinking"
             open={!card.codeStream && !card.toolCode}
           >
-            <summary>{card.codeStream || card.toolCode ? 'Thinking' : 'Thinking…'}</summary>
+            <summary>{card.codeStream || card.toolCode ? 'Analyzing forge' : 'Analyzing forge…'}</summary>
             <div className="thinking-content">{card.codeThinking}</div>
           </details>
         )}

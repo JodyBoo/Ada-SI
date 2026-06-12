@@ -5,6 +5,7 @@ import {
   PROGRESSION_STORAGE_KEY,
   SECOND_MODEL_STORAGE_KEY,
   SYSTEM_STORAGE_KEY,
+  THINKING_EFFORT_STORAGE_KEY,
   VIEWER_PHASES,
 } from '../constants'
 import type {
@@ -22,6 +23,10 @@ import type {
 } from '../types/events'
 import { createDefaultViewerPhases, createToolPlanCard } from '../types/events'
 import { createFeedId } from '../utils/id'
+import {
+  normalizeReasoningEffort,
+  type ReasoningEffort,
+} from '../utils/reasoningEffort'
 import {
   didLevelUp,
   getMaxTotalXp,
@@ -60,6 +65,7 @@ type AppState = {
   models: string[]
   chatModel: string
   toolCreatorModel: string
+  thinkingEffort: ReasoningEffort
   systemInstructions: string
   systemPanelOpen: boolean
   conversation: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
@@ -84,6 +90,7 @@ type AppState = {
   setModels: (models: string[]) => void
   setChatModel: (model: string) => void
   setToolCreatorModel: (model: string) => void
+  setThinkingEffort: (effort: ReasoningEffort) => void
   setSystemInstructions: (text: string) => void
   setSystemPanelOpen: (open: boolean) => void
   setStatus: (text: string, isError?: boolean) => void
@@ -192,6 +199,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   models: [],
   chatModel: loadStorage(CHAT_MODEL_STORAGE_KEY),
   toolCreatorModel: loadStorage(SECOND_MODEL_STORAGE_KEY),
+  thinkingEffort: normalizeReasoningEffort(loadStorage(THINKING_EFFORT_STORAGE_KEY)),
   systemInstructions: loadStorage(SYSTEM_STORAGE_KEY),
   systemPanelOpen: Boolean(loadStorage(SYSTEM_STORAGE_KEY)),
   conversation: [],
@@ -221,6 +229,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   setToolCreatorModel: (model) => {
     localStorage.setItem(SECOND_MODEL_STORAGE_KEY, model)
     set({ toolCreatorModel: model })
+  },
+  setThinkingEffort: (effort) => {
+    localStorage.setItem(THINKING_EFFORT_STORAGE_KEY, effort)
+    set({ thinkingEffort: effort })
   },
   setSystemInstructions: (text) => {
     localStorage.setItem(SYSTEM_STORAGE_KEY, text)
@@ -386,7 +398,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const initialStep: ProcessStep = {
       stepId: 'lite_model',
-      label: 'Lite model processing',
+      label: 'Scout agent processing',
       status: 'active',
       model,
     }
@@ -555,7 +567,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       toolCode: '',
       testCode: '',
       codeTab: 'tool',
-      codePanelTitle: 'Generating…',
+      codePanelTitle: 'Forging…',
       showCodeTabs: false,
       showCodeStream: true,
       showRetry: false,
@@ -594,11 +606,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().collapseToolPlan(
           item.id,
           card.lastSuccessMessage || '',
-          'Installed',
+          'Unlocked',
           'success',
         )
       } else if (card.mode === 'pending') {
-        get().collapseToolPlan(item.id, '', 'Plan pending', 'pending')
+        get().collapseToolPlan(item.id, '', 'Blueprint pending', 'pending')
       }
     }
   },
@@ -643,7 +655,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().updateToolPlanCard(id, {
       viewerPhases: phases,
       viewerOutput: [...item?.card.viewerOutput || [], message],
-      codePanelTitle: 'Complete',
+      codePanelTitle: 'Forge complete',
       codeTab: 'output',
       showCodeTabs: true,
       showRetry: false,

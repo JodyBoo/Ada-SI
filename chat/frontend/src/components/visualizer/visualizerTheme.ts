@@ -25,9 +25,9 @@ export const MODE_INTENSITY = {
 } as const
 
 export const MODE_LABELS = {
-  idle: 'Idle',
-  thinking: 'Thinking',
-  streaming: 'Streaming',
-  building: 'Building',
-  celebrating: 'Unlocked',
+  idle: 'Standby',
+  thinking: 'Analyzing',
+  streaming: 'Transmitting',
+  building: 'Forging',
+  celebrating: 'Skill unlocked',
 } as const

@@ -59,6 +59,7 @@ async def stream_runtime_install(
     sse_data: Callable[[dict], str],
     cancelled: Callable[[], Any],
     skip_pip: bool = False,
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[str]:
     """Install into tool runtime after pip approval (or when no new packages)."""
 
@@ -162,6 +163,7 @@ async def stream_runtime_install(
                         litellm_url=litellm_url,
                         headers=litellm_headers,
                         run_id=run_id,
+                        reasoning_effort=reasoning_effort,
                     )
                     yield sse_data(
                         {
@@ -233,6 +235,7 @@ async def maybe_pause_for_pip_approval(
     step: Callable[..., str],
     phase: Callable[..., str],
     sse_data: Callable[[dict], str],
+    reasoning_effort: str | None = None,
 ) -> tuple[bool, AsyncIterator[str] | None, list[str]]:
     """Return (paused, pause_event_stream, new_packages)."""
     new_packages, already_installed = await get_new_packages_for_requirements(requirements)
@@ -251,6 +254,7 @@ async def maybe_pause_for_pip_approval(
         "test_code": test_code,
         "requirements": requirements,
         "creator_model": creator_model,
+        "reasoning_effort": reasoning_effort,
         "created_at": time.time(),
     }
 
@@ -292,6 +296,7 @@ async def run_sandbox_phase(
     blog: Callable[..., str],
     sse_data: Callable[[dict], str],
     cancelled: Callable[[], Any],
+    reasoning_effort: str | None = None,
 ) -> tuple[bool, str, str, str, list[tuple[str, str]]]:
     """Run sandbox with auto-retry. Returns (success, logs, test_code, tool_code, notices)."""
     log_output = ""
@@ -323,6 +328,7 @@ async def run_sandbox_phase(
                     litellm_url=litellm_url,
                     headers=headers,
                     run_id=run_id,
+                    reasoning_effort=reasoning_effort,
                 )
                 continue
             except Exception:

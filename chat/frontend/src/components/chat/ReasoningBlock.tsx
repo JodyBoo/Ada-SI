@@ -15,7 +15,9 @@ export function ReasoningBlock({
 
   return (
     <details className={className} open={open}>
-      <summary>{streaming && !text ? 'Thinking...' : streaming ? 'Thinking...' : 'Thinking'}</summary>
+      <summary>
+        {streaming && !text ? 'Analyzing...' : streaming ? 'Analyzing...' : 'Analysis'}
+      </summary>
       <div className="thinking-content">{text}</div>
     </details>
   )

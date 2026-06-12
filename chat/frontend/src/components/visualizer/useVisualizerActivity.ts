@@ -28,7 +28,7 @@ export function useVisualizerActivity(): VisualizerActivity {
         mode: 'celebrating' as const,
         intensity: MODE_INTENSITY.celebrating,
         activePhaseIndex: VIEWER_PHASES.length - 1,
-        statusLabel: 'Unlocked',
+        statusLabel: 'Skill unlocked',
       }
     }
 
@@ -51,7 +51,7 @@ export function useVisualizerActivity(): VisualizerActivity {
         mode: 'building' as const,
         intensity: MODE_INTENSITY.building,
         activePhaseIndex,
-        statusLabel: 'Building',
+        statusLabel: 'Forging',
       }
     }
 
@@ -70,7 +70,7 @@ export function useVisualizerActivity(): VisualizerActivity {
           mode: 'thinking' as const,
           intensity: MODE_INTENSITY.thinking,
           activePhaseIndex: 0,
-          statusLabel: 'Thinking',
+          statusLabel: 'Analyzing',
         }
       }
 
@@ -78,7 +78,7 @@ export function useVisualizerActivity(): VisualizerActivity {
         mode: 'streaming' as const,
         intensity: MODE_INTENSITY.streaming,
         activePhaseIndex: 0,
-        statusLabel: 'Streaming',
+        statusLabel: 'Transmitting',
       }
     }
 
@@ -87,7 +87,7 @@ export function useVisualizerActivity(): VisualizerActivity {
         mode: 'thinking' as const,
         intensity: MODE_INTENSITY.thinking,
         activePhaseIndex: 0,
-        statusLabel: 'Thinking',
+        statusLabel: 'Analyzing',
       }
     }
 
@@ -95,7 +95,7 @@ export function useVisualizerActivity(): VisualizerActivity {
       mode: 'idle' as const,
       intensity: MODE_INTENSITY.idle,
       activePhaseIndex: 0,
-      statusLabel: 'Idle',
+      statusLabel: 'Standby',
     }
   }, [isSending, feed, celebration])
 }

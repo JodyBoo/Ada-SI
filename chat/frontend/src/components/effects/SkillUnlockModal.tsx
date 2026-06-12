@@ -68,7 +68,7 @@ export function SkillUnlockModal({ event, onDismiss }: SkillUnlockModalProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.22, duration: 0.4 }}
         >
-          Skill Unlocked
+          Skill Unlocked!
         </motion.h2>
 
         <motion.p
@@ -88,7 +88,7 @@ export function SkillUnlockModal({ event, onDismiss }: SkillUnlockModalProps) {
         >
           {leveledUp
             ? 'ADA leveled up with a new capability.'
-            : 'This skill is now available in your sidebar and ready to use.'}
+            : 'This skill is now in your loadout and ready to cast.'}
         </motion.p>
 
         <motion.p
@@ -138,7 +138,7 @@ export function SkillUnlockModal({ event, onDismiss }: SkillUnlockModalProps) {
           transition={{ delay: 0.62, duration: 0.3 }}
           autoFocus
         >
-          Continue
+          Continue quest
         </motion.button>
       </motion.div>
     </motion.div>

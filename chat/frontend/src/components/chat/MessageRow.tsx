@@ -13,7 +13,7 @@ export function MessageRow({ item }: MessageRowProps) {
   if (item.type === 'user') {
     return (
       <div className="message-row user-row">
-        <span className="message-avatar user-avatar">You</span>
+        <span className="message-avatar user-avatar" title="You">⚔</span>
         <article className="message user">{item.content}</article>
       </div>
     )
@@ -32,7 +32,7 @@ export function MessageRow({ item }: MessageRowProps) {
 
   return (
     <div className="message-row assistant-row">
-      <span className="message-avatar assistant-avatar">AI</span>
+      <span className="message-avatar assistant-avatar" title="ADA">✦</span>
       <article className="message assistant">
         <div className="message-header">
           <div className="message-actions">

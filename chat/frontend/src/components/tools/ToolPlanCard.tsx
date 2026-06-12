@@ -14,12 +14,12 @@ type ToolPlanCardProps = {
 
 function getBadgeText(card: ToolPlanCardState): string {
   if (card.mode === 'draft') {
-    return card.kind === 'edit' ? 'Drafting skill edit plan' : 'Drafting skill plan'
+    return card.kind === 'edit' ? 'Scouting skill upgrade' : 'Scouting new skill'
   }
   if (card.mode === 'building' || card.mode === 'success') {
-    return 'Skill Creation Viewer'
+    return 'Forge Sequence'
   }
-  return card.kind === 'edit' ? 'Skill edit proposal' : 'Skill proposal'
+  return card.kind === 'edit' ? 'Skill upgrade proposal' : 'Skill blueprint'
 }
 
 export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
@@ -59,7 +59,7 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
         <div className="tool-card-summary">
           <span className="tool-card-summary-name">{card.toolName}</span>
           <span className={`tool-card-summary-badge status-${card.collapsedStatusClass || 'success'}`}>
-            {card.collapsedStatus || 'Done'}
+            {card.collapsedStatus || 'Complete'}
           </span>
           {card.collapsedSummary && (
             <span className="tool-card-summary-detail">{card.collapsedSummary}</span>
@@ -119,7 +119,7 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
             <div className="skill-unlock-banner-text">
               <span className="skill-unlock-banner-title">Skill unlocked!</span>
               <span className="skill-unlock-banner-sub">
-                {card.toolName} is ready to use
+                {card.toolName} added to your loadout
               </span>
             </div>
           </div>
@@ -161,11 +161,11 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
         {isPending && (
           <>
             <div className="tool-plan-feedback">
-              <label htmlFor={`plan-feedback-${card.planId}`}>Request changes</label>
+              <label htmlFor={`plan-feedback-${card.planId}`}>Request blueprint changes</label>
               <textarea
                 id={`plan-feedback-${card.planId}`}
                 rows={3}
-                placeholder="Describe what to change in this plan — the model will revise it using your feedback."
+                placeholder="Tell ADA what to change in this skill blueprint — it will revise the plan from your feedback."
                 value={card.feedback}
                 disabled={card.busy}
                 onChange={(e) => updateToolPlanCard(feedId, { feedback: e.target.value })}
@@ -180,7 +180,7 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
                   void runToolBuild(feedId, card.planId!, card.runId)
                 }
               >
-                Approve & Build Skill
+                Approve & Forge (+180 XP)
               </button>
               <button
                 type="button"
@@ -190,7 +190,7 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
                   void handleToolRevision(feedId, card.planId!, card.runId, card.feedback)
                 }
               >
-                {card.busy ? 'Revising plan...' : 'Request changes'}
+                {card.busy ? 'Revising blueprint...' : 'Revise blueprint'}
               </button>
               <button
                 type="button"
@@ -200,7 +200,7 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
                   void handleToolRejection(feedId, card.planId!, card.runId)
                 }
               >
-                Discard
+                Scrap
               </button>
             </div>
           </>
@@ -215,7 +215,7 @@ export function ToolPlanCard({ feedId, card }: ToolPlanCardProps) {
                 disabled={card.busy}
                 onClick={() => void runToolBuild(feedId, card.planId!, card.runId)}
               >
-                Retry Build
+                Retry Forge
               </button>
             )}
           </div>

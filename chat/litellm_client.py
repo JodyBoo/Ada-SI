@@ -35,7 +35,9 @@ def build_completion_payload(
         payload["tools"] = tools
         payload["tool_choice"] = "auto"
     effort = reasoning_effort
-    if effort is None and is_gemini_model(model):
+    if effort in ("off", "none"):
+        effort = None
+    elif effort is None and is_gemini_model(model):
         effort = "low"
     if effort:
         payload["reasoning_effort"] = effort

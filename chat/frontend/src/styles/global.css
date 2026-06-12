@@ -1101,6 +1101,10 @@ button:disabled {
   box-shadow: var(--shadow-glow), var(--glow-gold), var(--glow-teal);
 }
 
+.welcome-mark svg {
+  color: #060810;
+}
+
 .welcome h2 {
   margin: 0 0 0.5rem;
   font-size: var(--text-lg);
@@ -1174,8 +1178,9 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.6875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
+  line-height: 1;
 }
 
 .message-avatar.user-avatar {

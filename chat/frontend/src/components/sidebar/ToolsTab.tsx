@@ -1,4 +1,5 @@
 import { deleteTool } from '../../api/client'
+import { IconSkill, IconSparkle, IconTrash } from '../icons/GamifiedIcons'
 import { useToolBuildStream } from '../../hooks/useToolBuildStream'
 import { useAppStore } from '../../state/store'
 import type { ToolSummary } from '../../types/events'
@@ -7,23 +8,11 @@ function ToolsEmptyState() {
   return (
     <div className="empty-state">
       <div className="empty-state-icon" aria-hidden="true">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77A6 6 0 0 1 21 12v0a6 6 0 0 1-6 6H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1" />
-          <path d="M16 2l4 4" />
-        </svg>
+        <IconSparkle size={24} />
       </div>
-      <p className="empty-state-title">No skills yet</p>
-      <p className="empty-state-text">Approved skills appear here automatically.</p>
+      <p className="empty-state-title">No skills unlocked yet</p>
+      <p className="empty-state-text">Forge a skill in chat and it will appear in your loadout.</p>
     </div>
-  )
-}
-
-function iconTrash() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
-      <path d="M10 11v6M14 11v6" />
-    </svg>
   )
 }
 
@@ -37,14 +26,14 @@ export function ToolsTab({ tools }: ToolsTabProps) {
   const { refreshTools, refreshPackages } = useToolBuildStream()
 
   const handleDelete = async (toolName: string) => {
-    if (!confirm(`Delete skill "${toolName}"? This cannot be undone.`)) return
+    if (!confirm(`Remove skill "${toolName}" from your loadout? This cannot be undone.`)) return
     try {
       await deleteTool(toolName)
       await refreshTools()
       await refreshPackages()
-      setStatus(`Skill "${toolName}" deleted.`)
+      setStatus(`Skill "${toolName}" removed from loadout.`)
     } catch (error) {
-      setStatus(`Delete failed: ${(error as Error).message}`, true)
+      setStatus(`Remove failed: ${(error as Error).message}`, true)
     }
   }
 
@@ -63,23 +52,22 @@ export function ToolsTab({ tools }: ToolsTabProps) {
           <button
             type="button"
             className="tool-delete-btn"
-            title="Delete skill"
+            title="Remove skill"
+            aria-label={`Remove skill ${tool.name}`}
             onClick={() => void handleDelete(tool.name)}
           >
-            {iconTrash()}
+            <IconTrash />
           </button>
           <div className="tool-card-header">
             <span className="tool-card-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77A6 6 0 0 1 21 12v0a6 6 0 0 1-6 6H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h1" />
-              </svg>
+              <IconSkill />
             </span>
             <h3 className="tool-card-name">{tool.name}</h3>
             {recentlyUnlockedTool === tool.name && (
-              <span className="tool-card-new-badge">New</span>
+              <span className="tool-card-new-badge">New unlock</span>
             )}
           </div>
-          <p className="tool-card-desc">{tool.description || 'No description.'}</p>
+          <p className="tool-card-desc">{tool.description || 'No skill description yet.'}</p>
         </div>
       ))}
     </>

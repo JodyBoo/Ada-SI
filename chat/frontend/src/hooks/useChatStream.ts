@@ -148,6 +148,7 @@ export function useChatStream() {
           body: {
             model,
             tool_creator_model: store.toolCreatorModel,
+            reasoning_effort: store.thinkingEffort,
             messages: buildMessages(),
             run_id: runId,
             stream: true,
@@ -200,7 +201,7 @@ export function useChatStream() {
         if (planReceived) {
           store.pushConversation({
             role: 'assistant',
-            content: '[System] A new skill plan is pending your approval.',
+            content: '[System] A new skill blueprint awaits your approval.',
           })
           store.setStatus('')
         } else {
@@ -243,11 +244,11 @@ export function useChatStream() {
             if (current.content) {
               store.pushConversation({ role: 'assistant', content: current.content })
             }
-            store.setStatus('Generation stopped.')
+            store.setStatus('Response halted.')
           } else {
             store.removeFeedItem(assistantId)
             store.popConversation()
-            store.setStatus('Generation stopped.')
+            store.setStatus('Response halted.')
           }
         } else {
           store.removeFeedItem(assistantId)
@@ -281,7 +282,7 @@ export function useChatStream() {
         store.setIsSending(false)
         store.setAbortController(null)
       }
-      store.setStatus('Process stopped.')
+      store.setStatus('Quest aborted.')
       return
     }
     abortController?.abort()

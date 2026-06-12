@@ -9,8 +9,6 @@ from litellm_client import build_completion_payload, stream_completion_deltas
 from debug_log import log_block, log_debug, log_generated_code, log_plan, log_stream_delta
 from tools_engine import validate_tool_module
 
-TOOL_CREATOR_REASONING_EFFORT = "high"
-
 PLAN_SYSTEM_PROMPT = """You are an expert Python tool architect for a self-improving AI agent.
 
 The user needs a new callable tool. Produce a clear implementation plan in markdown with these sections:
@@ -162,13 +160,14 @@ async def _litellm_chat(
     messages: list[dict],
     *,
     temperature: float = 0.2,
+    reasoning_effort: str | None = None,
 ) -> str:
     payload = build_completion_payload(
         model,
         messages,
         stream=False,
         temperature=temperature,
-        reasoning_effort=TOOL_CREATOR_REASONING_EFFORT,
+        reasoning_effort=reasoning_effort,
     )
     async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
@@ -191,6 +190,7 @@ async def _litellm_stream(
     messages: list[dict],
     *,
     temperature: float = 0.2,
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[tuple[str, str]]:
     """Yield (kind, text) where kind is 'content' or 'reasoning'."""
     async for kind, text in stream_completion_deltas(
@@ -199,7 +199,7 @@ async def _litellm_stream(
         model,
         messages,
         temperature=temperature,
-        reasoning_effort=TOOL_CREATOR_REASONING_EFFORT,
+        reasoning_effort=reasoning_effort,
     ):
         yield kind, text
 
@@ -212,6 +212,7 @@ async def draft_tool_plan_stream(
     litellm_url: str,
     headers: dict[str, str],
     run_id: str = "",
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[tuple[str, str]]:
     user_content = (
         f"Design a new tool named `{tool_name}`.\n\n"
@@ -228,7 +229,8 @@ async def draft_tool_plan_stream(
         description,
     )
     async for kind, text in _litellm_stream(
-        litellm_url, headers, creator_model, messages, temperature=0.2
+        litellm_url, headers, creator_model, messages, temperature=0.2,
+        reasoning_effort=reasoning_effort,
     ):
         log_stream_delta(run_id, "plan", kind, text)
         yield kind, text
@@ -244,6 +246,7 @@ async def draft_tool_edit_plan_stream(
     litellm_url: str,
     headers: dict[str, str],
     run_id: str = "",
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[tuple[str, str]]:
     user_content = (
         f"Edit existing tool `{tool_name}`.\n\n"
@@ -262,7 +265,8 @@ async def draft_tool_edit_plan_stream(
         change_description,
     )
     async for kind, text in _litellm_stream(
-        litellm_url, headers, creator_model, messages, temperature=0.2
+        litellm_url, headers, creator_model, messages, temperature=0.2,
+        reasoning_effort=reasoning_effort,
     ):
         log_stream_delta(run_id, "plan", kind, text)
         yield kind, text
@@ -278,6 +282,7 @@ async def revise_tool_plan_stream(
     litellm_url: str,
     headers: dict[str, str],
     run_id: str = "",
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[tuple[str, str]]:
     user_content = (
         f"Tool name: `{tool_name}`\n\n"
@@ -292,7 +297,8 @@ async def revise_tool_plan_stream(
     ]
     log_block(run_id, "PLAN", f"revise request tool={tool_name}", feedback)
     async for kind, text in _litellm_stream(
-        litellm_url, headers, creator_model, messages, temperature=0.2
+        litellm_url, headers, creator_model, messages, temperature=0.2,
+        reasoning_effort=reasoning_effort,
     ):
         log_stream_delta(run_id, "plan", kind, text)
         yield kind, text
@@ -437,6 +443,7 @@ async def repair_generated_tool_response(
     headers: dict[str, str],
     run_id: str = "",
     edit_context: dict | None = None,
+    reasoning_effort: str | None = None,
 ) -> tuple[str, str, list[str]]:
     log_debug(run_id, "CODE_FIX", f"repairing codegen JSON model={creator_model}")
     user_content = (
@@ -459,7 +466,8 @@ async def repair_generated_tool_response(
         {"role": "user", "content": user_content},
     ]
     raw = await _litellm_chat(
-        litellm_url, headers, creator_model, messages, temperature=0.1
+        litellm_url, headers, creator_model, messages, temperature=0.1,
+        reasoning_effort=reasoning_effort,
     )
     tool_code, test_code, requirements = parse_generated_tool_response(raw)
     log_generated_code(
@@ -482,6 +490,7 @@ async def fix_validation_errors(
     litellm_url: str,
     headers: dict[str, str],
     run_id: str = "",
+    reasoning_effort: str | None = None,
 ) -> tuple[str, str]:
     log_debug(run_id, "CODE_FIX", f"fixing validation errors model={creator_model}")
     user_content = (
@@ -499,7 +508,8 @@ async def fix_validation_errors(
         {"role": "user", "content": user_content},
     ]
     raw = await _litellm_chat(
-        litellm_url, headers, creator_model, messages, temperature=0.1
+        litellm_url, headers, creator_model, messages, temperature=0.1,
+        reasoning_effort=reasoning_effort,
     )
     parsed = _extract_json_object(raw)
     fixed_tool = str(parsed.get("tool_code", "")).strip() or tool_code
@@ -529,6 +539,7 @@ async def fix_runtime_failure(
     litellm_url: str,
     headers: dict[str, str],
     run_id: str = "",
+    reasoning_effort: str | None = None,
 ) -> tuple[str, str]:
     log_debug(run_id, "CODE_FIX", f"fixing runtime failure model={creator_model}")
     user_content = (
@@ -546,7 +557,8 @@ async def fix_runtime_failure(
         {"role": "user", "content": user_content},
     ]
     raw = await _litellm_chat(
-        litellm_url, headers, creator_model, messages, temperature=0.1
+        litellm_url, headers, creator_model, messages, temperature=0.1,
+        reasoning_effort=reasoning_effort,
     )
     parsed = _extract_json_object(raw)
     fixed_tool = str(parsed.get("tool_code", "")).strip() or tool_code
@@ -576,6 +588,7 @@ async def fix_test_code(
     litellm_url: str,
     headers: dict[str, str],
     run_id: str = "",
+    reasoning_effort: str | None = None,
 ) -> str:
     log_debug(run_id, "CODE_FIX", f"requesting test_code fix model={creator_model}")
     user_content = (
@@ -593,7 +606,8 @@ async def fix_test_code(
         {"role": "user", "content": user_content},
     ]
     raw = await _litellm_chat(
-        litellm_url, headers, creator_model, messages, temperature=0.1
+        litellm_url, headers, creator_model, messages, temperature=0.1,
+        reasoning_effort=reasoning_effort,
     )
     parsed = _extract_json_object(raw)
     fixed = str(parsed.get("test_code", "")).strip()
@@ -621,6 +635,7 @@ async def generate_tool_code_stream(
     headers: dict[str, str],
     run_id: str = "",
     edit_context: dict | None = None,
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[tuple[str, str]]:
     if edit_context:
         user_content = (
@@ -651,7 +666,8 @@ async def generate_tool_code_stream(
         f"streaming code generation tool={tool_name} model={creator_model}",
     )
     async for kind, text in _litellm_stream(
-        litellm_url, headers, creator_model, messages, temperature=0.1
+        litellm_url, headers, creator_model, messages, temperature=0.1,
+        reasoning_effort=reasoning_effort,
     ):
         log_stream_delta(run_id, "code_gen", kind, text)
         yield kind, text

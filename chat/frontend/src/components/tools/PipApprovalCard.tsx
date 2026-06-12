@@ -20,19 +20,19 @@ export function PipApprovalCard({ feedId, card, pip }: PipApprovalCardProps) {
   return (
     <div className={`pip-install-card${pip.busy ? ' pip-install-busy' : ''}`} data-pip-id={pip.pipId}>
       <div className="pip-install-header">
-        <span className="pip-install-badge">Pip install approval</span>
+        <span className="pip-install-badge">Supply drop approval</span>
         <h4 className="pip-install-title">{card.toolName || 'Skill'}</h4>
       </div>
       <div className="pip-install-body">
-        <p>The skill build needs new Python packages in the shared runtime venv:</p>
+        <p>This skill forge needs new supply packages in the shared runtime cache:</p>
         <ul className="pip-install-packages">{pkgItems}</ul>
         {pip.alreadyInstalled && pip.alreadyInstalled.length > 0 && (
           <p className="pip-install-note">
-            Already in shared venv: {pip.alreadyInstalled.join(', ')}
+            Already in supply cache: {pip.alreadyInstalled.join(', ')}
           </p>
         )}
         <p className="pip-install-warning">
-          Approve only packages you trust. They persist in the shared environment.
+          Approve only supplies you trust. They persist in the shared environment.
         </p>
       </div>
       <div className="pip-install-actions">
@@ -42,7 +42,7 @@ export function PipApprovalCard({ feedId, card, pip }: PipApprovalCardProps) {
           disabled={pip.busy}
           onClick={() => void runPipContinuation(feedId, pip.pipId, card.runId)}
         >
-          Approve pip install
+          Approve supplies
         </button>
         <button
           type="button"
@@ -50,7 +50,7 @@ export function PipApprovalCard({ feedId, card, pip }: PipApprovalCardProps) {
           disabled={pip.busy}
           onClick={() => void handlePipRejection(feedId, pip.pipId, card.runId)}
         >
-          Reject
+          Decline
         </button>
       </div>
     </div>

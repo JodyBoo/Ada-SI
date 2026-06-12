@@ -1,4 +1,5 @@
 import { cancelRun } from '../../api/client'
+import { IconQuest } from '../icons/GamifiedIcons'
 import { runHasActiveStep, useAppStore } from '../../state/store'
 import { truncateText } from '../../utils/text'
 import { ProcessStep } from './ProcessStep'
@@ -7,13 +8,10 @@ function ProcessEmptyState() {
   return (
     <div className="empty-state">
       <div className="empty-state-icon" aria-hidden="true">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
-          <circle cx="12" cy="12" r="4" />
-        </svg>
+        <IconQuest size={24} />
       </div>
-      <p className="empty-state-title">No activity yet</p>
-      <p className="empty-state-text">Your routing timeline appears here as the agent works.</p>
+      <p className="empty-state-title">No active quests</p>
+      <p className="empty-state-text">Mission steps appear here while ADA works on your request.</p>
     </div>
   )
 }
@@ -37,14 +35,14 @@ export function ProcessPanel() {
       setAbortController(null)
       setIsSending(false)
     }
-    setStatus('Process stopped.')
+    setStatus('Quest aborted.')
   }
 
   return (
     <aside className="side-panel process-panel glass-panel">
       <div className="panel-header">
         <div className="panel-title-row">
-          <h2>Process</h2>
+          <h2>Quest Log</h2>
           {processRuns.length > 0 && (
             <span className="panel-badge">{processRuns.length}</span>
           )}
@@ -62,11 +60,11 @@ export function ProcessPanel() {
                 <button
                   type="button"
                   className="process-run-stop"
-                  title="Stop this process"
-                  aria-label="Stop process"
+                  title="Abort this quest"
+                  aria-label="Abort quest"
                   onClick={() => stopProcessRun(run.runId)}
                 >
-                  Stop
+                  Abort
                 </button>
               )}
             </div>

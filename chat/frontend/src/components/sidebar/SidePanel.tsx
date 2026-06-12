@@ -28,7 +28,7 @@ export function SidePanel() {
   return (
     <aside className="side-panel tools-panel glass-panel">
       <div className="panel-header">
-        <div className="panel-tabs" role="tablist" aria-label="Skills sidebar">
+        <div className="panel-tabs" role="tablist" aria-label="Skill loadout sidebar">
           <button
             type="button"
             className={`panel-tab${activeTab === 'tools' ? ' active' : ''}`}
@@ -45,11 +45,11 @@ export function SidePanel() {
             aria-selected={activeTab === 'packages'}
             onClick={() => setActiveTab('packages')}
           >
-            Packages
+            Supplies
           </button>
         </div>
         <div className="panel-title-row">
-          <h2>{activeTab === 'packages' ? 'Packages' : 'Skills'}</h2>
+          <h2>{activeTab === 'packages' ? 'Supply Cache' : 'Skill Loadout'}</h2>
           {activeTab === 'tools' ? (
             <span className="panel-badge">{tools.length}</span>
           ) : (

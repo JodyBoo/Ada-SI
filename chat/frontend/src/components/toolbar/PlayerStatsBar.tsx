@@ -43,7 +43,7 @@ export function PlayerStatsBar() {
               {tools.length} skill{tools.length === 1 ? '' : 's'}
             </span>
             <span className="player-chat-count">
-              {playerProgress.chatsCompleted} chat{playerProgress.chatsCompleted === 1 ? '' : 's'}
+              {playerProgress.chatsCompleted} quest{playerProgress.chatsCompleted === 1 ? '' : 's'}
             </span>
           </div>
         </div>

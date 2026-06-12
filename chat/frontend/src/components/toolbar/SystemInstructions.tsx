@@ -12,14 +12,14 @@ export function SystemInstructions() {
       open={systemPanelOpen}
       onToggle={(e) => setSystemPanelOpen((e.target as HTMLDetailsElement).open)}
     >
-      <summary>System instructions</summary>
+      <summary>Agent directives</summary>
       <label className="sr-only" htmlFor="system-input">
-        System instructions
+        Agent directives
       </label>
       <textarea
         id="system-input"
         rows={2}
-        placeholder="Optional instructions for the model..."
+        placeholder="Optional directives to shape ADA's behavior..."
         value={systemInstructions}
         onChange={(e) => setSystemInstructions(e.target.value)}
       />

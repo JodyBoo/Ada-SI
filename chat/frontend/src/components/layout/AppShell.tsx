@@ -23,10 +23,10 @@ export function AppShell() {
               <button
                 type="button"
                 className={`scroll-bottom${showScrollBottom ? '' : ' hidden'}`}
-                title="Scroll to bottom"
+                title="Scroll to latest"
                 onClick={() => setShowScrollBottom(false)}
               >
-                ↓ New messages
+                ↓ New intel
               </button>
             </div>
             <Composer />

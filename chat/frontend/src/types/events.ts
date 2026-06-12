@@ -24,6 +24,7 @@ export type AppConfig = {
   docker_message?: string
   tool_runtime_available?: boolean
   tool_runtime_url?: string
+  lite_model_reasoning_effort?: string
 }
 
 export type ModelsResponse = {
