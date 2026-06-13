@@ -23,13 +23,18 @@ type ToolsTabProps = {
 export function ToolsTab({ tools }: ToolsTabProps) {
   const setStatus = useAppStore((s) => s.setStatus)
   const recentlyUnlockedTool = useAppStore((s) => s.recentlyUnlockedTool)
+  const activeSkillApp = useAppStore((s) => s.activeSkillApp)
   const openSkillApp = useAppStore((s) => s.openSkillApp)
+  const closeSkillApp = useAppStore((s) => s.closeSkillApp)
   const { refreshTools, refreshPackages } = useToolBuildStream()
 
   const handleDelete = async (toolName: string) => {
     if (!confirm(`Remove skill "${toolName}" from your loadout? This cannot be undone.`)) return
     try {
       await deleteTool(toolName)
+      if (activeSkillApp === toolName) {
+        closeSkillApp()
+      }
       await refreshTools()
       await refreshPackages()
       setStatus(`Skill "${toolName}" removed from loadout.`)

@@ -321,6 +321,9 @@ def delete_tool(tool_name: str) -> None:
         TOOLS_DIR / f"{tool_name}.py",
         TOOLS_DIR / f"{tool_name}.requirements.txt",
         TOOLS_DIR / f"{tool_name}.test.py",
+        TOOLS_DIR / f"{tool_name}.manifest.json",
+        TOOLS_DIR / "skill_data" / f"{tool_name}.json",
+        TOOLS_DIR / f".verify_{tool_name}_test_run.py",
     ]
     for path in paths:
         path.unlink(missing_ok=True)

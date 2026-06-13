@@ -316,6 +316,66 @@ def _extract_json_object(text: str) -> dict:
         return json.loads(text[start : end + 1])
 
 
+def _extract_json_manifest_value(text: str) -> dict | None:
+    """Extract a manifest object even when the full JSON response is malformed."""
+    match = re.search(r'"manifest"\s*:\s*(\{)', text)
+    if not match:
+        return None
+    start = match.start(1)
+    depth = 0
+    for i in range(start, len(text)):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    parsed = json.loads(text[start : i + 1])
+                except json.JSONDecodeError:
+                    return None
+                return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def parse_revise_preview_response(
+    raw: str,
+    *,
+    fallback_tool: str,
+    fallback_test: str,
+    fallback_manifest: dict | None,
+) -> tuple[str, str, dict | None]:
+    text = _strip_markdown_fences(raw)
+    parse_error: str | None = None
+
+    try:
+        parsed = _extract_json_object(text)
+    except (ValueError, json.JSONDecodeError) as exc:
+        parse_error = str(exc)
+        tool_code = (_extract_json_string_value(text, "tool_code") or "").strip()
+        test_code = (_extract_json_string_value(text, "test_code") or "").strip()
+        manifest = _extract_json_manifest_value(text)
+        if not tool_code and not test_code:
+            raise ValueError(
+                "Preview revision response missing tool_code or test_code. "
+                f"The model may have returned malformed JSON. {parse_error}"
+            ) from exc
+        return (
+            tool_code or fallback_tool,
+            test_code or fallback_test,
+            manifest if manifest is not None else fallback_manifest,
+        )
+
+    tool_code = str(parsed.get("tool_code", "")).strip() or fallback_tool
+    test_code = str(parsed.get("test_code", "")).strip() or fallback_test
+    manifest = parsed.get("manifest")
+    if manifest is None:
+        manifest = fallback_manifest
+    elif not isinstance(manifest, dict):
+        manifest = fallback_manifest
+    return tool_code, test_code, manifest
+
+
 def parse_generated_tool_response(raw: str) -> tuple[str, str, list[str], dict | None]:
     text = _strip_markdown_fences(raw)
     tool_code = ""
@@ -372,6 +432,50 @@ def validate_test_code(test_code: str) -> tuple[bool, str]:
     return True, ""
 
 
+async def repair_revise_preview_response(
+    tool_name: str,
+    feedback: str,
+    tool_code: str,
+    test_code: str,
+    manifest: dict | None,
+    raw_response: str,
+    error_message: str,
+    creator_model: str,
+    *,
+    litellm_url: str,
+    headers: dict[str, str],
+    run_id: str = "",
+    reasoning_effort: str | None = None,
+) -> tuple[str, str, dict | None]:
+    log_debug(run_id, "CODE_FIX", f"repairing preview revision JSON model={creator_model}")
+    manifest_json = json.dumps(manifest, indent=2) if manifest else "null"
+    user_content = (
+        f"Tool name: `{tool_name}`\n\n"
+        f"User feedback for the preview UI:\n{feedback}\n\n"
+        f"Parse error: {error_message}\n\n"
+        f"Malformed model output:\n```\n{raw_response[:12000]}\n```\n\n"
+        f"Current manifest:\n```json\n{manifest_json}\n```\n\n"
+        f"Return corrected tool_code, test_code, and manifest."
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": get_forge_fix_codegen_prompt().replace("{tool_name}", tool_name),
+        },
+        {"role": "user", "content": user_content},
+    ]
+    raw = await _litellm_chat(
+        litellm_url, headers, creator_model, messages, temperature=0.1,
+        reasoning_effort=reasoning_effort,
+    )
+    return parse_revise_preview_response(
+        raw,
+        fallback_tool=tool_code,
+        fallback_test=test_code,
+        fallback_manifest=manifest,
+    )
+
+
 async def repair_generated_tool_response(
     plan: str,
     tool_name: str,
@@ -418,6 +522,50 @@ async def repair_generated_tool_response(
         source="repair_codegen",
     )
     return tool_code, test_code, requirements
+
+
+async def repair_revise_preview_response(
+    tool_name: str,
+    feedback: str,
+    tool_code: str,
+    test_code: str,
+    manifest: dict | None,
+    raw_response: str,
+    error_message: str,
+    creator_model: str,
+    *,
+    litellm_url: str,
+    headers: dict[str, str],
+    run_id: str = "",
+    reasoning_effort: str | None = None,
+) -> tuple[str, str, dict | None]:
+    log_debug(run_id, "CODE_FIX", f"repairing preview revision JSON model={creator_model}")
+    manifest_json = json.dumps(manifest, indent=2) if manifest else "null"
+    user_content = (
+        f"Tool name: `{tool_name}`\n\n"
+        f"User feedback for the preview UI:\n{feedback}\n\n"
+        f"Parse error: {error_message}\n\n"
+        f"Malformed model output:\n```\n{raw_response[:12000]}\n```\n\n"
+        f"Current manifest:\n```json\n{manifest_json}\n```\n\n"
+        f"Return corrected tool_code, test_code, and manifest."
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": get_forge_fix_codegen_prompt().replace("{tool_name}", tool_name),
+        },
+        {"role": "user", "content": user_content},
+    ]
+    raw = await _litellm_chat(
+        litellm_url, headers, creator_model, messages, temperature=0.1,
+        reasoning_effort=reasoning_effort,
+    )
+    return parse_revise_preview_response(
+        raw,
+        fallback_tool=tool_code,
+        fallback_test=test_code,
+        fallback_manifest=manifest,
+    )
 
 
 async def fix_validation_errors(
@@ -507,14 +655,29 @@ async def revise_preview_code(
         litellm_url, headers, creator_model, messages, temperature=0.1,
         reasoning_effort=reasoning_effort,
     )
-    parsed = _extract_json_object(raw)
-    fixed_tool = str(parsed.get("tool_code", "")).strip() or tool_code
-    fixed_test = str(parsed.get("test_code", "")).strip() or test_code
-    fixed_manifest = parsed.get("manifest")
-    if fixed_manifest is None:
-        fixed_manifest = manifest
-    elif not isinstance(fixed_manifest, dict):
-        fixed_manifest = manifest
+    try:
+        fixed_tool, fixed_test, fixed_manifest = parse_revise_preview_response(
+            raw,
+            fallback_tool=tool_code,
+            fallback_test=test_code,
+            fallback_manifest=manifest,
+        )
+    except ValueError as exc:
+        log_debug(run_id, "CODE_FIX", f"preview revision JSON parse failed: {exc}")
+        fixed_tool, fixed_test, fixed_manifest = await repair_revise_preview_response(
+            tool_name,
+            feedback,
+            tool_code,
+            test_code,
+            manifest,
+            raw,
+            str(exc),
+            creator_model,
+            litellm_url=litellm_url,
+            headers=headers,
+            run_id=run_id,
+            reasoning_effort=reasoning_effort,
+        )
     if not validate_tool_module(fixed_tool):
         raise ValueError("Revised tool_code still missing get_tool_schema() or run().")
     ok, reason = validate_test_code(fixed_test)

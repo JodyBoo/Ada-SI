@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import re
+import shutil
 import types
 from pathlib import Path
 
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 TOOLS_DIR = Path(__file__).parent / "custom_tools"
 TOOLS_DIR.mkdir(exist_ok=True)
+STAGING_DIR = Path(__file__).parent / "staging"
 SKILL_DATA_DIR = TOOLS_DIR / "skill_data"
 SKILL_DATA_DIR.mkdir(exist_ok=True)
 
@@ -495,29 +497,47 @@ def write_tool(tool_name: str, code: str) -> Path:
     return write_tool_files(tool_name, code, [])
 
 
-async def delete_tool_async(tool_name: str) -> None:
+def tool_artifact_paths(tool_name: str) -> tuple[list[Path], list[Path]]:
+    """Return file and directory paths owned by a tool (including interactive skill data)."""
     _validate_tool_name(tool_name)
+    files = [
+        TOOLS_DIR / f"{tool_name}.py",
+        TOOLS_DIR / f"{tool_name}.requirements.txt",
+        TOOLS_DIR / f"{tool_name}.test.py",
+        TOOLS_DIR / f"{tool_name}.manifest.json",
+        skill_data_path(tool_name),
+        TOOLS_DIR / f".verify_{tool_name}_test_run.py",
+    ]
+    dirs = [STAGING_DIR / tool_name]
+    return files, dirs
 
-    target = TOOLS_DIR / f"{tool_name}.py"
-    req_path = TOOLS_DIR / f"{tool_name}.requirements.txt"
-    test_path = TOOLS_DIR / f"{tool_name}.test.py"
-    manifest_path = TOOLS_DIR / f"{tool_name}.manifest.json"
-    data_path = skill_data_path(tool_name)
-    tool_paths = (target, req_path, test_path, manifest_path, data_path)
 
-    if not any(path.exists() for path in tool_paths):
+def _unlink_tool_pycache(tool_name: str) -> None:
+    pycache = TOOLS_DIR / "__pycache__"
+    if not pycache.is_dir():
+        return
+    for pattern in (f"{tool_name}.cpython-*.pyc", f"{tool_name}.test.cpython-*.pyc"):
+        for cached in pycache.glob(pattern):
+            cached.unlink(missing_ok=True)
+
+
+def _remove_tool_artifacts(tool_name: str) -> None:
+    files, dirs = tool_artifact_paths(tool_name)
+    for path in files:
+        path.unlink(missing_ok=True)
+    for path in dirs:
+        if path.exists():
+            shutil.rmtree(path, ignore_errors=True)
+    _unlink_tool_pycache(tool_name)
+
+
+async def delete_tool_async(tool_name: str) -> None:
+    files, dirs = tool_artifact_paths(tool_name)
+    if not any(path.exists() for path in files) and not any(path.exists() for path in dirs):
         raise FileNotFoundError(f"Tool '{tool_name}' not found.")
 
     await runtime_delete_tool(tool_name)
-
-    for path in tool_paths:
-        path.unlink(missing_ok=True)
-
-    pycache = TOOLS_DIR / "__pycache__"
-    if pycache.is_dir():
-        for pattern in (f"{tool_name}.cpython-*.pyc", f"{tool_name}.test.cpython-*.pyc"):
-            for cached in pycache.glob(pattern):
-                cached.unlink(missing_ok=True)
+    _remove_tool_artifacts(tool_name)
 
 
 def delete_tool(tool_name: str) -> None:
