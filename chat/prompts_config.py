@@ -426,6 +426,18 @@ Rules:
 - Mock network/subprocess in test_code; runtime has network but tests must not call live APIs unless intended
 - tool_code must keep get_tool_schema() and run(); lazy-import third-party deps inside run() only"""
 
+_DEFAULT_FORGE_GOOGLE_SEARCH_GUIDANCE = """
+
+Google Search grounding is ENABLED for this Forge request. Use it proactively — do not guess API or library details.
+
+When planning or writing tool_code, search when you need:
+- Third-party API docs: base URLs, paths, auth (API keys, OAuth, headers), request/response JSON shape, error codes, rate limits
+- PyPI package names, import paths, and current usage (verify the package exists and matches the API you implement)
+- Breaking changes, deprecations, or version-specific behavior for libraries listed in requirements
+- SDK method names, query parameters, or response fields you are uncertain about
+
+Workflow: search first when unsure, then implement tool_code, requirements, manifest, and tests grounded in what you find. Prefer official documentation. Do not invent endpoints, field names, or package APIs."""
+
 # --- Tool schema descriptions ---
 
 _DEFAULT_TOOL_GENERATE_NEW_DESCRIPTION = (
@@ -784,6 +796,10 @@ def get_forge_fix_validation_prompt() -> str:
 
 def get_forge_fix_runtime_prompt() -> str:
     return load_prompts_config()["forge_fix_runtime_prompt"]
+
+
+def get_forge_google_search_guidance() -> str:
+    return _DEFAULT_FORGE_GOOGLE_SEARCH_GUIDANCE
 
 
 def get_tool_generate_new_description() -> str:

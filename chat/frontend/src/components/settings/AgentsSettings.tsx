@@ -110,7 +110,7 @@ export function AgentsSettings() {
           </label>
           <p className="forger-guidance-hint">
             {searchAvailable
-              ? 'When enabled, Gemini models use built-in Google Search — Scout when Scout is Gemini, Forge when Forge master is Gemini.'
+              ? 'When enabled, Gemini models use built-in Google Search — Scout for chat, Forge for planning and coding (API docs, packages, endpoints).'
               : 'Available when Scout or Forge master uses a Gemini model.'}
           </p>
         </div>

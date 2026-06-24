@@ -20,6 +20,7 @@ from prompts_config import (
     get_forge_fix_runtime_prompt,
     get_forge_fix_test_prompt,
     get_forge_fix_validation_prompt,
+    get_forge_google_search_guidance,
     get_forge_plan_prompt,
     get_forge_preview_review_prompt,
     get_forge_revise_plan_prompt,
@@ -47,6 +48,14 @@ def forge_google_search_context(enabled: bool):
 
 def _effective_forge_google_search(model: str) -> bool:
     return _forge_gemini_google_search.get() and is_gemini_model(model)
+
+
+def _forge_system_prompt(base: str, model: str, *, tool_name: str = "") -> str:
+    """Append Google Search coding guidance when Forge search is active."""
+    prompt = base.replace("{tool_name}", tool_name) if tool_name else base
+    if _effective_forge_google_search(model):
+        prompt += get_forge_google_search_guidance()
+    return prompt
 
 
 def normalize_preview_screenshot(raw: str | None) -> str | None:
@@ -183,7 +192,7 @@ async def draft_tool_plan_stream(
         f"Requirements:\n{description}"
     )
     messages = [
-        {"role": "system", "content": get_forge_plan_prompt()},
+        {"role": "system", "content": _forge_system_prompt(get_forge_plan_prompt(), creator_model)},
         {"role": "user", "content": user_content},
     ]
     log_block(
@@ -222,7 +231,7 @@ async def draft_tool_edit_plan_stream(
     if existing_manifest:
         user_content += f"\n\nCurrent manifest:\n```json\n{json.dumps(existing_manifest, indent=2)}\n```"
     messages = [
-        {"role": "system", "content": get_forge_edit_plan_prompt()},
+        {"role": "system", "content": _forge_system_prompt(get_forge_edit_plan_prompt(), creator_model)},
         {"role": "user", "content": user_content},
     ]
     log_block(
@@ -259,7 +268,7 @@ async def revise_tool_plan_stream(
         f"Produce a revised plan that addresses the user's feedback."
     )
     messages = [
-        {"role": "system", "content": get_forge_revise_plan_prompt()},
+        {"role": "system", "content": _forge_system_prompt(get_forge_revise_plan_prompt(), creator_model)},
         {"role": "user", "content": user_content},
     ]
     log_block(run_id, "PLAN", f"revise request tool={tool_name}", feedback)
@@ -510,7 +519,9 @@ async def repair_generated_tool_response(
     messages = [
         {
             "role": "system",
-            "content": get_forge_fix_codegen_prompt().replace("{tool_name}", tool_name),
+            "content": _forge_system_prompt(
+                get_forge_fix_codegen_prompt(), creator_model, tool_name=tool_name
+            ),
         },
         {"role": "user", "content": user_content},
     ]
@@ -558,7 +569,9 @@ async def repair_revise_preview_response(
     messages = [
         {
             "role": "system",
-            "content": get_forge_fix_codegen_prompt().replace("{tool_name}", tool_name),
+            "content": _forge_system_prompt(
+                get_forge_fix_codegen_prompt(), creator_model, tool_name=tool_name
+            ),
         },
         {"role": "user", "content": user_content},
     ]
@@ -598,7 +611,9 @@ async def fix_validation_errors(
     messages = [
         {
             "role": "system",
-            "content": get_forge_fix_validation_prompt().replace("{tool_name}", tool_name),
+            "content": _forge_system_prompt(
+                get_forge_fix_validation_prompt(), creator_model, tool_name=tool_name
+            ),
         },
         {"role": "user", "content": user_content},
     ]
@@ -657,8 +672,10 @@ async def revise_preview_code(
     messages = [
         {
             "role": "system",
-            "content": get_forge_revise_preview_prompt_for_profile(revise_profile).replace(
-                "{tool_name}", tool_name
+            "content": _forge_system_prompt(
+                get_forge_revise_preview_prompt_for_profile(revise_profile),
+                creator_model,
+                tool_name=tool_name,
             ),
         },
         {"role": "user", "content": user_content},
@@ -751,7 +768,9 @@ async def review_interactive_preview(
     messages = [
         {
             "role": "system",
-            "content": get_forge_preview_review_prompt().replace("{tool_name}", tool_name),
+            "content": _forge_system_prompt(
+                get_forge_preview_review_prompt(), creator_model, tool_name=tool_name
+            ),
         },
         {"role": "user", "content": user_content},
     ]
@@ -796,7 +815,9 @@ async def fix_preview_issues(
     messages = [
         {
             "role": "system",
-            "content": get_forge_fix_preview_prompt().replace("{tool_name}", tool_name),
+            "content": _forge_system_prompt(
+                get_forge_fix_preview_prompt(), creator_model, tool_name=tool_name
+            ),
         },
         {"role": "user", "content": user_content},
     ]
@@ -874,7 +895,9 @@ async def fix_runtime_failure(
     messages = [
         {
             "role": "system",
-            "content": get_forge_fix_runtime_prompt().replace("{tool_name}", tool_name),
+            "content": _forge_system_prompt(
+                get_forge_fix_runtime_prompt(), creator_model, tool_name=tool_name
+            ),
         },
         {"role": "user", "content": user_content},
     ]
@@ -923,7 +946,9 @@ async def fix_test_code(
     messages = [
         {
             "role": "system",
-            "content": get_forge_fix_test_prompt().replace("{tool_name}", tool_name),
+            "content": _forge_system_prompt(
+                get_forge_fix_test_prompt(), creator_model, tool_name=tool_name
+            ),
         },
         {"role": "user", "content": user_content},
     ]
@@ -978,9 +1003,14 @@ async def generate_tool_code_stream(
                 f"{json.dumps(edit_context['ui_files'], indent=2)}\n```\n\n"
             )
         user_content += "Produce updated tool_code, test_code, requirements, manifest, and ui_files when custom."
+        if _effective_forge_google_search(creator_model):
+            user_content += (
+                "\n\nUse Google Search for current API and library documentation "
+                "before writing updated tool_code and requirements."
+            )
         profile = infer_codegen_profile(plan, manifest=edit_context.get("manifest"))
-        system_prompt = get_forge_edit_code_prompt_for_profile(profile).replace(
-            "{tool_name}", tool_name
+        system_prompt = _forge_system_prompt(
+            get_forge_edit_code_prompt_for_profile(profile), creator_model, tool_name=tool_name
         )
     else:
         user_content = (
@@ -991,9 +1021,14 @@ async def generate_tool_code_stream(
             f"and verified at /workspace/{tool_name}.py in a temporary test venv. "
             f"Use manifest null for headless tools; include interactive manifest when the plan specifies an app UI."
         )
+        if _effective_forge_google_search(creator_model):
+            user_content += (
+                "\n\nUse Google Search for current API and library documentation "
+                "before writing tool_code and requirements."
+            )
         profile = infer_codegen_profile(plan)
-        system_prompt = get_forge_code_prompt_for_profile(profile).replace(
-            "{tool_name}", tool_name
+        system_prompt = _forge_system_prompt(
+            get_forge_code_prompt_for_profile(profile), creator_model, tool_name=tool_name
         )
 
     messages = [
