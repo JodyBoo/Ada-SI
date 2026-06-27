@@ -739,6 +739,7 @@ Set `ADA_LOG_LEVEL=DEBUG` in `.env` for verbose stream logging.
 |---------|----------|
 | **No models in the picker** | Add a provider API key in Settings → API keys or `.env`. Only providers with valid keys return models. |
 | **Services won't start (native)** | Verify Python 3.12 and Node.js 22+ are installed. Check `logs/` for errors. Try `.\install-native.bat` or `.\start.ps1 -InstallOnly` then `.\start.ps1`. |
+| **Docker build fails at `npm ci`** | Usually an out-of-sync `chat/frontend/package-lock.json`. On a dev machine run `npm install` in `chat/frontend`, commit the updated lockfile, pull on the VPS, and re-run `./start-docker.sh`. |
 | **Services won't start (Docker)** | Ensure Docker is running. Check `docker compose logs` for errors. Verify `.env` exists and API keys are set. Try `.\stop-docker.ps1` then re-run `start-docker`. |
 | **Blank or broken UI** | Run `npm run build` in `chat/frontend`, or start with `.\start.ps1 -Dev`. Ensure `chat/static/index.html` exists. |
 | **LiteLLM connection errors** | Confirm LiteLLM is running on port 4000. Check `logs/litellm.log`. Verify `LITELLM_MASTER_KEY` matches in `.env` and LiteLLM config. |
